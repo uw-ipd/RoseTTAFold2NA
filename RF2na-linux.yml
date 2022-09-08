@@ -1,0 +1,19 @@
+name: RF2NA
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - pytorch::pytorch
+  - requests
+  - conda-forge::psutil 
+  - conda-forge::cudatoolkit=11.3
+  - conda-forge::tqdm
+  - dglteam::dgl-cuda11.3
+  - bioconda::hhsuite=3.2.0
+  - bioconda::blast
+  - bioconda::hmmer
+  - bioconda::infernal=1.1.2
+  - bioconda::cd-hit
+  - bioconda::csblast
+  - biocore::psipred=4.01
+  - biocore::blast-legacy=2.2.26
