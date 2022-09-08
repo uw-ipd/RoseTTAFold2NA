@@ -9,10 +9,10 @@ dependencies:
   - conda-forge::cudatoolkit=11.3
   - conda-forge::tqdm
   - dglteam::dgl-cuda11.3
-  - bioconda::hhsuite=3.2.0
+  - bioconda::hhsuite
   - bioconda::blast
   - bioconda::hmmer
-  - bioconda::infernal=1.1.2
+  - bioconda::infernal
   - bioconda::cd-hit
   - bioconda::csblast
   - biocore::psipred=4.01
