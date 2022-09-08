@@ -5,8 +5,8 @@ GitHub repo for RoseTTAFold2 with nucleic acids
 
 1. Clone the package
 ```
-git clone https://github.com/uw-ipd/RF2NA.git
-cd RF2NA
+git clone https://github.com/uw-ipd/RoseTTAFold2NA.git
+cd RoseTTAFold2NA
 ```
 
 2. Create conda environment
