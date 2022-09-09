@@ -71,7 +71,7 @@ conda activate RF2
 cd example
 ../run_RF2NA.sh t000_ protein.fa R:rna.fa
 ```
-The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` to specify protein, DNA, RNA respectively (default is protein).  Each chain is a separate file (e.g., for double-stranded DNA, both strands need to be provided as separate fasta files).  Outputs are written to the folder `t000_`.
+The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` to specify protein, RNA, DNA respectively (default is protein).  Each chain is a separate file (e.g., for double-stranded DNA, both strands need to be provided as separate fasta files).  Outputs are written to the folder `t000_`.
 
 ## Expected outputs
-You will get a prediction with estimated per-residue LDDT in the B-factor column (model.pdb)
+You will get a prediction with estimated per-residue LDDT in the B-factor column (model_00.pdb)
