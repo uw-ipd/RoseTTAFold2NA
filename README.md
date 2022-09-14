@@ -5,8 +5,8 @@ GitHub repo for RoseTTAFold2 with nucleic acids
 
 1. Clone the package
 ```
-git clone https://github.com/uw-ipd/RF2NA.git
-cd RF2NA
+git clone https://github.com/uw-ipd/RoseTTAFold2NA.git
+cd RoseTTAFold2NA
 ```
 
 2. Create conda environment
@@ -53,7 +53,6 @@ mkdir -p RNA
 # Rfam [300M]
 wget ftp://ftp.ebi.ac.uk/pub/databases/Rfam/CURRENT/Rfam.full_region.gz -C ./RNA
 wget ftp://ftp.ebi.ac.uk/pub/databases/Rfam/CURRENT/Rfam.cm.gz -C ./RNA
-gzip -d -f version.txt.gz
 
 # RNAcentral [12G]
 wget ftp://ftp.ebi.ac.uk/pub/databases/RNAcentral/current_release/sequences/rnacentral_species_specific_ids.fasta.gz -C ./RNA
@@ -67,7 +66,7 @@ cd ..
 
 ## Usage
 ```
-conda activate RF2
+conda activate RF2NA
 cd example
 ../run_RF2NA.sh t000_ protein.fa R:rna.fa
 ```
