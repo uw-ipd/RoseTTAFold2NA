@@ -27,7 +27,7 @@ python setup.py install
 cd network
 wget https://files.ipd.uw.edu/dimaio/RF2NA_sep22.tgz
 tar xvfz RF2NA_sep22.tgz
-ls weights/ # it should contain a 1.6gb weights file
+ls weights/ # it should contain a 800mb weights file
 cd ..
 ```
 
