@@ -111,6 +111,11 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
     for i in range(alphabet.shape[0]):
         msa[msa == alphabet[i]] = i
 
+    # also accept 'U' in rna_alphabet
+    if rna_alphabet:
+        msa[msa == "U"] = 30
+
+
     #print ((msa>40).nonzero()) 
     #print (msa_orig[6788]) 
 
