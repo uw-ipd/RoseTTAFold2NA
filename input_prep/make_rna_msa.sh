@@ -123,7 +123,7 @@ rm cdhitest2d.db cdhitest2d.db.clstr db.clstr
 
 # nhmmer on previous hits
 echo "Realign all with nhmmer"
-for e_val in 1e-8, 1e-7, 1e-6, 1e-3, 1e-2, 1e-1
+for e_val in 1e-8 1e-7 1e-6 1e-3 1e-2 1e-1
 do
     nhmmer --noali -A nhmmer.a2m --incE $e_val --cpu $CPU --watson $in_fasta db | grep 'no alignment saved'
     a2mToFasta nhmmer.a2m $out_tag.unfilter.afa
