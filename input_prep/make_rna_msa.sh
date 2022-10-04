@@ -135,5 +135,3 @@ do
     fi
 done
 
-cp nhmmer.afa $prefix.afa
-rm nhmmer.a2m nhmmer.a2m.clean nhmmer.a2m.fas db trim.db
