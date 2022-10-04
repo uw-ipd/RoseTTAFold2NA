@@ -113,7 +113,7 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
     # also accept 'U' in rna_alphabet
     if rna_alphabet:
-        msa[msa == "U"] = 30
+        msa[msa == ord("U")] = 30
 
 
     #print ((msa>40).nonzero()) 
