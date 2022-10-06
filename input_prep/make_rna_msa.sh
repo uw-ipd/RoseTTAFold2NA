@@ -24,7 +24,7 @@ max_rfam_num=100
 
 Lch=`grep -v '^>' $in_fasta | tr -d '\n' | wc -c`
 
-mkdir $out_dir
+mkdir -p $out_dir
 cp $in_fasta $out_dir
 cd $out_dir
 in_fasta=`basename $in_fasta`
@@ -40,10 +40,11 @@ function retrieveSeq {
     for file in $tag.list.split.*
     do
         suffix=`echo $file | sed 's/.*\.list\.split\.//g'`
-        blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out $tag.db.$suffix &> /dev/null
+        blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out tmp.$tag.db.$suffix -outfmt ">Accession:%a_TaxID:%T @%s" &> /dev/null
+	    cat tmp.$tag.db.$suffix | tr '@' '\n' > $tag.db.$suffix
     done
-    cat $tag.db.* > $tag.db
-    rm $tag.db.* $tag.list.split.*
+    cat $tag.db.* | sed 's/_\([0-9]*\)_TaxID:0/_TaxID:\1/' > $tag.db  # fix for incorrect taxids
+    rm $tag.db.* $tag.list.split.* tmp.$tag.db.* 
 }
 
 function a2mToFasta {
@@ -128,7 +129,7 @@ do
     nhmmer --noali -A nhmmer.a2m --incE $e_val --cpu $CPU --watson $in_fasta db | grep 'no alignment saved'
     a2mToFasta nhmmer.a2m $out_tag.unfilter.afa
     hhfilter -i $out_tag.unfilter.afa -id 99 -cov 50 -o $out_tag.afa
-    hitnum=`grep '^>' nhmmer.afa | wc -l`
+    hitnum=`grep '^>' $out_tag.afa | wc -l`
     if [[  $hitnum -gt $max_hhfilter_seqs ]]
     then
         break

@@ -11,7 +11,7 @@ dependencies:
   - dglteam::dgl-cuda11.3
   - bioconda::hhsuite
   - bioconda::blast
-  - bioconda::hmmer
+  - bioconda::hmmer>=3.3
   - bioconda::infernal
   - bioconda::cd-hit
   - bioconda::csblast
