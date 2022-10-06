@@ -41,7 +41,7 @@ function retrieveSeq {
     do
         suffix=`echo $file | sed 's/.*\.list\.split\.//g'`
         blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out tmp.$tag.db.$suffix -outfmt ">Accession:%a_TaxID:%T @%s" &> /dev/null
-	    cat tmp.$tag.db.$suffix | tr '@' '\n' > $tag.db.$suffix
+        cat tmp.$tag.db.$suffix | tr '@' '\n' > $tag.db.$suffix
     done
     cat $tag.db.* | sed 's/_\([0-9]*\)_TaxID:0/_TaxID:\1/' > $tag.db  # fix for incorrect taxids
     rm $tag.db.* $tag.list.split.* tmp.$tag.db.* 
@@ -51,14 +51,11 @@ function a2mToFasta {
     infile=$1
     outfile=$2
 
-    # a) remove insertions from input file
-    cat $infile | sed 's/[a-z\.]//g' >> $infile.clean
-
-    # b) run hhsearch reformat.pl
-    $PIPEDIR/input_prep/reformat.pl -l 49999 sto fas $infile.clean $infile.fas
+    # a) run hhsearch reformat.pl
+    $PIPEDIR/input_prep/reformat.pl -l 49999 sto fas $infile $infile.fas
     nhits=`grep '^>' $infile.fas | wc -l`
 
-    # c) pad with gaps
+    # b) pad with gaps
     Laln=`head -n 2 $infile.fas | tail -1 | wc -c`
     gaptag=`for ((i=$Laln;i<=$Lch;i++)); do echo -n '-'; done`
 
