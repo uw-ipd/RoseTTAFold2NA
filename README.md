@@ -73,7 +73,7 @@ cd ..
 ```
 conda activate RF2NA
 cd example
-../run_RF2NA.sh t000_ protein.fa R:rna.fa
+../run_RF2NA.sh t000_ protein.fa R:RNA.fa
 ```
 The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` to specify protein, RNA, DNA respectively (default is protein).  Each chain is a separate file (e.g., for double-stranded DNA, both strands need to be provided as separate fasta files).  Outputs are written to the folder `t000_`.
 
