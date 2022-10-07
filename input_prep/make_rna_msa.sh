@@ -47,24 +47,6 @@ function retrieveSeq {
     rm $tag.db.* $tag.list.split.* tmp.$tag.db.* 
 }
 
-function a2mToFasta {
-    infile=$1
-    outfile=$2
-
-    # a) run hhsearch reformat.pl
-    $PIPEDIR/input_prep/reformat.pl -l 49999 sto fas $infile $infile.fas
-    nhits=`grep '^>' $infile.fas | wc -l`
-
-    # b) pad with gaps
-    Laln=`head -n 2 $infile.fas | tail -1 | wc -c`
-    gaptag=`for ((i=$Laln;i<=$Lch;i++)); do echo -n '-'; done`
-
-    grep '^>' $in_fasta > $outfile
-    grep -v '^>' $in_fasta | tr -d '\n' >> $outfile
-    echo >> $outfile
-    cat $infile.fas | awk -v tag="$gaptag" '{if (substr($0,1,1)==">") {print $0} else {print $0tag}}'>> $outfile
-}
-
 # cmscan on Rfam
 echo "Run cmscan on Rfam"
 cmscan --tblout cmscan.tblout -o cmscan.out --noali $db0 $in_fasta
@@ -124,7 +106,7 @@ echo "Realign all with nhmmer"
 for e_val in 1e-8 1e-7 1e-6 1e-3 1e-2 1e-1
 do
     nhmmer --noali -A nhmmer.a2m --incE $e_val --cpu $CPU --watson $in_fasta db | grep 'no alignment saved'
-    a2mToFasta nhmmer.a2m $out_tag.unfilter.afa
+    esl-reformat --replace=acgt:____ a2m nhmmer.a2m > $out_tag.unfilter.afa
     hhfilter -i $out_tag.unfilter.afa -id 99 -cov 50 -o $out_tag.afa
     hitnum=`grep '^>' $out_tag.afa | wc -l`
     if [[  $hitnum -gt $max_hhfilter_seqs ]]
