@@ -34,7 +34,7 @@ function retrieveSeq {
     db=$2
     tag=$3
 
-    head -n $max_aln_seqs $tabfile | awk '{if ($2<$3) print $1,($2-6)"-"($3+6),"plus"; else print $1,($3-6)"-"($2+6),"minus"}' > $tag.list
+    head -n $max_aln_seqs $tabfile | awk '{if ($2<$3) print $1,(($2-6>1)?($2-6):1)"-"($3+6),"plus"; else print $1,($3-6)"-"($2+6),"minus"}' > $tag.list
     split -l $max_split_seqs $tag.list $tag.list.split.
 
     for file in $tag.list.split.*
@@ -76,13 +76,13 @@ fi
 echo "Run blastn on RNACentral"
 blastn -num_threads $CPU -query $in_fasta -strand plus -db $db1 -out blastn1.tab -task blastn -max_target_seqs $max_target_seqs -outfmt '6 saccver sstart send evalue bitscore nident staxids'
 retrieveSeq blastn1.tab $db1 blastn1
-rm blastn1.list blastn1.tab 
+rm blastn1.list blastn1.tab
 
 # blastn on nt
 echo "Run blastn on nt"
 blastn -num_threads $CPU -query $in_fasta -strand both -db $db2 -out blastn2.tab -task blastn -max_target_seqs $max_target_seqs -outfmt '6 saccver sstart send evalue bitscore nident staxids'
 retrieveSeq blastn2.tab $db2 blastn2
-rm blastn2.list blastn2.tab 
+rm blastn2.list blastn2.tab
 
 # combine, remove redundant
 echo "Cluster sequences"
@@ -115,3 +115,4 @@ do
     fi
 done
 
+rm nhmmer.a2m
