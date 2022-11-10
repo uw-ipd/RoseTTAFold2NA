@@ -9,6 +9,7 @@ dependencies:
   - conda-forge::cudatoolkit=11.3
   - conda-forge::tqdm
   - dglteam::dgl-cuda11.3
+  - bioconda::mafft
   - bioconda::hhsuite
   - bioconda::blast
   - bioconda::hmmer>=3.3

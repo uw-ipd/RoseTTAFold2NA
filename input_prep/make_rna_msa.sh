@@ -89,6 +89,7 @@ echo "Cluster sequences"
 throw_away_sequences=$(( $Lch*2/5 ));
 cat db0 blastn*.db > trim.db
 rm db0 blastn*.db
+
 for cut in 1.00 0.99 0.95 0.90
 do
     cd-hit-est-2d -T $CPU -i $in_fasta -i2 trim.db -c $cut -o cdhitest2d.db -l $throw_away_sequences -M 5000 &> /dev/null 
@@ -99,7 +100,7 @@ do
         break
     fi
 done
-rm cdhitest2d.db cdhitest2d.db.clstr db.clstr
+#rm cdhitest2d.db cdhitest2d.db.clstr db.clstr
 
 # nhmmer on previous hits
 echo "Realign all with nhmmer"
@@ -107,7 +108,10 @@ for e_val in 1e-8 1e-7 1e-6 1e-3 1e-2 1e-1
 do
     nhmmer --noali -A nhmmer.a2m --incE $e_val --cpu $CPU --watson $in_fasta db | grep 'no alignment saved'
     esl-reformat --replace=acgt:____ a2m nhmmer.a2m > $out_tag.unfilter.afa
-    hhfilter -i $out_tag.unfilter.afa -id 99 -cov 50 -o $out_tag.afa
+
+    # add query
+    mafft --preservecase --addfull $out_tag.unfilter.afa --keeplength $in_fasta > $out_tag.wquery.unfilt.afa 2> /dev/null
+    hhfilter -i $out_tag.wquery.unfilt.afa -id 99 -cov 50 -o $out_tag.afa
     hitnum=`grep '^>' $out_tag.afa | wc -l`
     if [[  $hitnum -gt $max_hhfilter_seqs ]]
     then
@@ -115,4 +119,4 @@ do
     fi
 done
 
-rm nhmmer.a2m
+#rm nhmmer.a2m
