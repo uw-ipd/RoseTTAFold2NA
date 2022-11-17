@@ -248,7 +248,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
     if idx_pdb is None:
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
-    Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
+    Bfacts = torch.clamp(bfacts.cpu(), 0, 100)
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL):
