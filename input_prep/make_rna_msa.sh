@@ -13,7 +13,7 @@ MEM="$5"
 
 # databases
 db0="$PIPEDIR/RNA/Rfam.cm";
-db1="$PIPEDIR/RNA/rnacentral2.fasta";
+db1="$PIPEDIR/RNA/rnacentral.fasta";
 db2="$PIPEDIR/RNA/nt";
 db0to1="$PIPEDIR/RNA/rfam_annotations.tsv.gz";
 db0to2="$PIPEDIR/RNA/Rfam.full_region.gz";
