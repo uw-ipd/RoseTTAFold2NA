@@ -803,6 +803,8 @@ def merge_a3m_homo(msa_orig, ins_orig, nmer):
 
 # Generate input features for single-chain
 def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True):
+
+    #print("msa: ", msa.min(), msa.max(), msa.shape)
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
     
     # get template features

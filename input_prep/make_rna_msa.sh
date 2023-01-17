@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# set -e
+
 # inputs
 in_fasta="$1"
 out_dir="$2"
@@ -11,7 +13,7 @@ MEM="$5"
 
 # databases
 db0="$PIPEDIR/RNA/Rfam.cm";
-db1="$PIPEDIR/RNA/rnacentral.fasta";
+db1="$PIPEDIR/RNA/rnacentral2.fasta";
 db2="$PIPEDIR/RNA/nt";
 db0to1="$PIPEDIR/RNA/rfam_annotations.tsv.gz";
 db0to2="$PIPEDIR/RNA/Rfam.full_region.gz";
@@ -40,7 +42,7 @@ function retrieveSeq {
     for file in $tag.list.split.*
     do
         suffix=`echo $file | sed 's/.*\.list\.split\.//g'`
-        blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out tmp.$tag.db.$suffix -outfmt ">Accession:%a_TaxID:%T @%s" &> /dev/null
+        blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out tmp.$tag.db.$suffix -outfmt ">Accession:%a_TaxID:%T @%s"
         cat tmp.$tag.db.$suffix | tr '@' '\n' > $tag.db.$suffix
     done
     cat $tag.db.* | sed 's/_\([0-9]*\)_TaxID:0/_TaxID:\1/' > $tag.db  # fix for incorrect taxids
@@ -92,8 +94,8 @@ rm db0 blastn*.db
 
 for cut in 1.00 0.99 0.95 0.90
 do
-    cd-hit-est-2d -T $CPU -i $in_fasta -i2 trim.db -c $cut -o cdhitest2d.db -l $throw_away_sequences -M 5000 &> /dev/null 
-    cd-hit-est -T $CPU -i cdhitest2d.db -c $cut -o db -l $throw_away_sequences -M 5000 &> /dev/null 
+    cd-hit-est-2d -T $CPU -i $in_fasta -i2 trim.db -c $cut -o cdhitest2d.db -l $throw_away_sequences -M 0
+    cd-hit-est -T $CPU -i cdhitest2d.db -c $cut -o db -l $throw_away_sequences -M 0
     nhits=`grep '^>' db | wc -l`
     if [[ $nhits -lt $max_aln_seqs ]]
     then
@@ -110,8 +112,8 @@ do
     esl-reformat --replace=acgt:____ a2m nhmmer.a2m > $out_tag.unfilter.afa
 
     # add query
-    mafft --preservecase --addfull $out_tag.unfilter.afa --keeplength $in_fasta > $out_tag.wquery.unfilt.afa 2> /dev/null
-    hhfilter -i $out_tag.wquery.unfilt.afa -id 99 -cov 50 -o $out_tag.afa
+    mafft --preservecase --addfull $out_tag.unfilter.afa --keeplength $in_fasta > $out_tag.wquery.unfilt.afa
+    hhfilter -i $out_tag.wquery.unfilt.afa -id 99 -cov 50 -o $out_tag.afa -M first
     hitnum=`grep '^>' $out_tag.afa | wc -l`
     if [[  $hitnum -gt $max_hhfilter_seqs ]]
     then

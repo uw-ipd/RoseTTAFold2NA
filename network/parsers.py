@@ -74,6 +74,21 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
     fstream = open(filename,"r")
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+    table_na = {}
+    if rna_alphabet or dna_alphabet:
+        table_na.update(str.maketrans(dict.fromkeys(string.ascii_uppercase)))
+        del table_na[ord('A')]
+        del table_na[ord('C')]
+        del table_na[ord('G')]
+        del table_na[ord('T')]
+        if rna_alphabet:
+            del table_na[ord('N')]
+            del table_na[ord('U')]
+        if dna_alphabet:
+            del table_na[ord('D')]
+        for k,v in table_na.items():
+            table_na[k] = '-'
+
 
     for line in fstream:
         # skip labels
@@ -88,9 +103,9 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
         # remove lowercase letters and append to MSA
         msa_i = line.translate(table)
+        msa_i = line.translate(table_na)
         msa_i = msa_i.replace('B','D') # hacky...
         msa.append(msa_i)
-
         # sequence length
         L = len(msa[-1])
 

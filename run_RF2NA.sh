@@ -35,7 +35,7 @@ function proteinMSA {
     if [ ! -s $WDIR/$tag.msa0.a3m ]
     then
         echo "Running HHblits"
-        $PIPEDIR/input_prep/make_protein_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout 2> $WDIR/log/make_msa.$tag.stderr
+        bash -x $PIPEDIR/input_prep/make_protein_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout 2> $WDIR/log/make_msa.$tag.stderr
     fi
 
 
@@ -45,7 +45,7 @@ function proteinMSA {
     if [ ! -s $WDIR/$tag.ss2 ]
     then
         echo "Running PSIPRED"
-        $PIPEDIR/input_prep/make_ss.sh $WDIR/$tag.msa0.a3m $WDIR/$tag.ss2 > $WDIR/log/make_ss.$tag.stdout 2> $WDIR/log/make_ss.$tag.stderr
+        bash -x $PIPEDIR/input_prep/make_ss.sh $WDIR/$tag.msa0.a3m $WDIR/$tag.ss2 > $WDIR/log/make_ss.$tag.stdout 2> $WDIR/log/make_ss.$tag.stderr
     fi
 
 
@@ -72,7 +72,7 @@ function RNAMSA {
     if [ ! -s $WDIR/$tag.afa ]
     then
         echo "Running rMSA (lite)"
-        $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout 2> $WDIR/log/make_msa.$tag.stderr
+        bash -x $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout 2> $WDIR/log/make_msa.$tag.stderr
     fi
 }
 
@@ -93,8 +93,13 @@ do
     elif [ $type = 'R' ]
     then
         RNAMSA $fasta $tag
-        argstring+="R:$WDIR/$tag.afa "
-    else [ $type = 'D' ]
+        if [[ -s $WDIR/$tag.afa ]]; then
+            argstring+="R:$WDIR/$tag.afa "
+        else
+            argstring+="R:$WDIR/$tag.fasta "
+        fi
+    elif [ $type = 'D' ]
+    then
         cp $fasta $WDIR/$tag.fa
         argstring+="D:$WDIR/$tag.fa "
     fi
@@ -104,6 +109,7 @@ done
 # 4. end-to-end prediction
 ############################################################
 echo "Running RoseTTAFold2NA to predict structures"
+echo "argstring: $argstring"
 mkdir -p $WDIR/models
 python $PIPEDIR/network/predict.py \
     -inputs $argstring \

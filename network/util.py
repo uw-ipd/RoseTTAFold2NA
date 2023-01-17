@@ -237,7 +237,15 @@ def get_tips(xyz, seq):
 
 
 # writepdb
-def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
+def writepdb(filename, atoms, seq, chain_index, residue_index, bfacts=None):
+
+    print("atoms:", atoms.shape)
+    print("seq:", seq.shape)
+    print("chain_index:", chain_index.shape)
+    print("residue_index:", residue_index.shape)
+    if bfacts is not None:
+        print("bfacts:", bfacts.shape)
+
     f = open(filename,"w")
     ctr = 1
     scpu = seq.cpu().squeeze(0)
@@ -245,8 +253,8 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
 
     if bfacts is None:
         bfacts = torch.zeros(atomscpu.shape[0])
-    if idx_pdb is None:
-        idx_pdb = 1 + torch.arange(atomscpu.shape[0])
+    #if idx_pdb is None:
+    #    idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     for i,s in enumerate(scpu):
@@ -254,6 +262,10 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
         if (natoms!=NHEAVY and natoms!=NTOTAL):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
             assert(False)
+
+        res_idx = residue_index[i] # Residue index (1-N)
+        ch_idx  = chain_index[i]   # Chain index (0-N)
+        ch_name = PDB_CHAIN_IDS[ch_idx] # Chain symbol (ABCDE...)
 
         atms = aa2long[s]
 
@@ -268,7 +280,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s], 
-                    "A", idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
+                    ch_name, res_idx, atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
 
