@@ -5,16 +5,24 @@ in_fasta="$1"
 out_dir="$2"
 out_tag="$3"
 
+overwrite=true
+if [ -f $out_dir/$out_tag.afa -a $overwrite = false]
+then
+    exit 0
+fi
+
 # resources
 CPU="$4"
 MEM="$5"
 
+RNADBDIR="$PIPEDIR/RNA"
+
 # databases
-db0="$PIPEDIR/RNA/Rfam.cm";
-db1="$PIPEDIR/RNA/rnacentral.fasta";
-db2="$PIPEDIR/RNA/nt";
-db0to1="$PIPEDIR/RNA/rfam_annotations.tsv.gz";
-db0to2="$PIPEDIR/RNA/Rfam.full_region.gz";
+db0="$RNADBDIR/Rfam.cm";
+db1="$RNADBDIR/rnacentral.fasta";
+db2="$RNADBDIR/nt";
+db0to1="$RNADBDIR/rfam_annotations.tsv.gz";
+db0to2="$RNADBDIR/Rfam.full_region.gz";
 
 max_aln_seqs=50000
 max_target_seqs=50000
@@ -34,17 +42,17 @@ function retrieveSeq {
     db=$2
     tag=$3
 
-    head -n $max_aln_seqs $tabfile | awk '{if ($2<$3) print $1,(($2-6>1)?($2-6):1)"-"($3+6),"plus"; else print $1,($3-6)"-"($2+6),"minus"}' > $tag.list
+    head -n $max_aln_seqs $tabfile | awk '{if ($2<$3) print $1,(($2-6>1)?($2-6):1)"-"($3+6),"plus"; else print $1,(($3-6>1)?($3-6):1)"-"($2+6),"minus"}' > $tag.list
     split -l $max_split_seqs $tag.list $tag.list.split.
 
     for file in $tag.list.split.*
     do
         suffix=`echo $file | sed 's/.*\.list\.split\.//g'`
-        blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out tmp.$tag.db.$suffix -outfmt ">Accession:%a_TaxID:%T @%s" &> /dev/null
-        cat tmp.$tag.db.$suffix | tr '@' '\n' > $tag.db.$suffix
+        blastdbcmd -db $db -entry_batch $tag.list.split.$suffix -out $tag.db.$suffix -outfmt ">Accession=%a_TaxID=%T @@NEWLINE@@%s" &> /dev/null
+        sed -i 's/@@NEWLINE@@/\n/g' $tag.db.$suffix
     done
-    cat $tag.db.* | sed 's/_\([0-9]*\)_TaxID:0/_TaxID:\1/' > $tag.db  # fix for incorrect taxids
-    rm $tag.db.* $tag.list.split.* tmp.$tag.db.* 
+    cat $tag.db.* | sed 's/_\([0-9]*\)_TaxID=0/_TaxID=\1/' > $tag.db  # fix for incorrect taxids
+    rm $tag.db.* $tag.list.split.*  
 }
 
 # cmscan on Rfam
@@ -100,7 +108,7 @@ do
         break
     fi
 done
-#rm cdhitest2d.db cdhitest2d.db.clstr db.clstr
+rm cdhitest2d.db cdhitest2d.db.clstr db.clstr
 
 # nhmmer on previous hits
 echo "Realign all with nhmmer"
@@ -108,7 +116,6 @@ for e_val in 1e-8 1e-7 1e-6 1e-3 1e-2 1e-1
 do
     nhmmer --noali -A nhmmer.a2m --incE $e_val --cpu $CPU --watson $in_fasta db | grep 'no alignment saved'
     esl-reformat --replace=acgt:____ a2m nhmmer.a2m > $out_tag.unfilter.afa
-
     # add query
     mafft --preservecase --addfull $out_tag.unfilter.afa --keeplength $in_fasta > $out_tag.wquery.unfilt.afa 2> /dev/null
     hhfilter -i $out_tag.wquery.unfilt.afa -id 99 -cov 50 -o $out_tag.afa
@@ -117,6 +124,11 @@ do
     then
         break
     fi
+    if [[ $hitnum -eq 0 ]]
+    then
+	echo "no hits found"
+        cp $in_fasta $out_tag.afa
+    fi
 done
 
-#rm nhmmer.a2m
+rm nhmmer.a2m

@@ -61,6 +61,7 @@ class NormSE3(nn.Module):
     def forward(self, features: Dict[str, Tensor], *args, **kwargs) -> Dict[str, Tensor]:
         with nvtx_range('NormSE3'):
             output = {}
+            #print ('NormSE3 features',[torch.sum(torch.isnan(v)) for v in features.values()])
             if hasattr(self, 'group_norm'):
                 # Compute per-degree norms of features
                 norms = [features[str(d)].norm(dim=-1, keepdim=True).clamp(min=self.NORM_CLAMP)
@@ -79,5 +80,6 @@ class NormSE3(nn.Module):
                     norm = feat.norm(dim=-1, keepdim=True).clamp(min=self.NORM_CLAMP)
                     new_norm = self.nonlinearity(self.layer_norms[degree](norm.squeeze(-1)).unsqueeze(-1))
                     output[degree] = new_norm * feat / norm
+            #print ('NormSE3 output',[torch.sum(torch.isnan(v)) for v in output.values()])
 
             return output

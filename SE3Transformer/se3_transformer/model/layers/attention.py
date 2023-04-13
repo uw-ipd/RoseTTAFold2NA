@@ -78,11 +78,10 @@ class AttentionSE3(nn.Module):
 
             with nvtx_range('attention dot product + softmax'):
                 # Compute attention weights (softmax of inner product between key and query)
-                with torch.cuda.amp.autocast(False):
-                    edge_weights = dgl.ops.e_dot_v(graph, key, query).squeeze(-1)
-                    edge_weights /= np.sqrt(self.key_fiber.num_features)
-                    edge_weights = edge_softmax(graph, edge_weights)
-                    edge_weights = edge_weights[..., None, None]
+                edge_weights = dgl.ops.e_dot_v(graph, key, query).squeeze(-1)
+                edge_weights /= np.sqrt(self.key_fiber.num_features)
+                edge_weights = edge_softmax(graph, edge_weights)
+                edge_weights = edge_weights[..., None, None]
 
             with nvtx_range('weighted sum'):
                 if isinstance(value, Tensor):
@@ -158,6 +157,11 @@ class AttentionBlockSE3(nn.Module):
             basis: Dict[str, Tensor]
     ):
         with nvtx_range('AttentionBlockSE3'):
+            #print ('AttentionBlockSE3 node_features',[torch.sum(torch.isnan(v)) for v in node_features.values()])
+            #print ('AttentionBlockSE3 edge_features',[torch.sum(torch.isnan(v)) for v in edge_features.values()])
+            #print ('AttentionBlockSE3 node_features',[torch.max(torch.abs(v)) for v in node_features.values()])
+            #print ('AttentionBlockSE3 edge_features',[torch.max(torch.abs(v)) for v in edge_features.values()])
+
             with nvtx_range('keys / values'):
                 fused_key_value = self.to_key_value(node_features, edge_features, graph, basis)
                 key, value = self._get_key_value_from_fused(fused_key_value)
@@ -166,9 +170,22 @@ class AttentionBlockSE3(nn.Module):
                 with torch.cuda.amp.autocast(False):
                     query = self.to_query(node_features)
 
+            #if (type(value) is dict):
+            #    print ('AttentionBlockSE3 value',[torch.sum(torch.isnan(v)) for v in value.values()])
+            #else:
+            #    print ('AttentionBlockSE3 value',[torch.sum(torch.isnan(value))])
+            #if (type(key) is dict):
+            #    print ('AttentionBlockSE3 key',[torch.sum(torch.isnan(k)) for k in key.values()])
+            #else:
+            #    print ('AttentionBlockSE3 key',[torch.sum(torch.isnan(key))])
+            #print ('AttentionBlockSE3 query',[torch.sum(torch.isnan(q)) for q in query.values()])
             z = self.attention(value, key, query, graph)
+            #print ('AttentionBlockSE3 b',[torch.sum(torch.isnan(zi)) for zi in z.values()])
             z_concat = aggregate_residual(node_features, z, 'cat')
-            return self.project(z_concat)
+            #print ('AttentionBlockSE3 c',[torch.sum(torch.isnan(zi)) for zi in z_concat.values()] )
+            output = self.project(z_concat)
+            #print ('AttentionBlockSE3 d',[torch.sum(torch.isnan(o)) for o in output.values()] )
+            return output
 
     def _get_key_value_from_fused(self, fused_key_value):
         # Extract keys and queries features from fused features

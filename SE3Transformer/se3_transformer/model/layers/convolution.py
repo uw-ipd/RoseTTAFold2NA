@@ -320,6 +320,9 @@ class ConvSE3(nn.Module):
             out = {}
             in_features = []
 
+            #print ('ConvSE3 node_feats',[torch.sum(torch.isnan(v)) for v in node_feats.values()])
+            #print ('ConvSE3 edge_feats',[torch.sum(torch.isnan(v)) for v in edge_feats.values()])
+
             # Fetch all input features from edge and node features
             for degree_in in self.fiber_in.degrees:
                 src_node_features = node_feats[str(degree_in)][src]
@@ -358,6 +361,11 @@ class ConvSE3(nn.Module):
                                                                         basis.get(dict_key, None))
                     out[str(degree_out)] = out_feature
 
+            #if (type(out) is dict):
+            #    print ('ConvSE3 out',[torch.sum(torch.isnan(v)) for v in out.values()])
+            #else:
+            #    print ('ConvSE3 out',[torch.sum(torch.isnan(out))])
+
             for degree_out in self.fiber_out.degrees:
                 if self.self_interaction and str(degree_out) in self.to_kernel_self:
                     with nvtx_range(f'self interaction'):
@@ -369,7 +377,9 @@ class ConvSE3(nn.Module):
                     if self.sum_over_edge:
                         with nvtx_range(f'pooling'):
                             if isinstance(out, dict):
+                                #print ('ConvSE3 pre-pool',degree_out,torch.sum(torch.isnan(out[str(degree_out)])), out[str(degree_out)].dtype )
                                 out[str(degree_out)] = dgl.ops.copy_e_sum(graph, out[str(degree_out)])
+                                #print ('ConvSE3 post-pool',degree_out,torch.sum(torch.isnan(out[str(degree_out)])), out[str(degree_out)].dtype )
                             else:
                                 out = dgl.ops.copy_e_sum(graph, out)
                     else:

@@ -4,7 +4,7 @@ import os
 
 TRUNK_PARAMS = ['n_extra_block', 'n_main_block', 'n_ref_block',\
                 'd_msa', 'd_msa_full', 'd_pair', 'd_templ',\
-                'n_head_msa', 'n_head_pair', 'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop', 'rbf_sigma']
+                'n_head_msa', 'n_head_pair', 'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop']
 
 SE3_PARAMS = ['num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div', 
               'l0_in_features', 'l0_out_features', 'l1_in_features', 'l1_out_features', 'num_edge_features'
@@ -85,8 +85,6 @@ def get_args():
             help="Number of hidden features for templates [64]")
     trunk_group.add_argument("-p_drop", type=float, default=0.15,
             help="Dropout ratio [0.15]")
-    trunk_group.add_argument("-rbf_sigma", type=float, default=1.0,
-            help="Sigma scale factor for RBF [1.0]")
 
     # Structure module properties
     str_group = parser.add_argument_group("structure module parameters")
@@ -110,11 +108,14 @@ def get_args():
             help="Number of attention heads for SE3-Transformer [4]")
     str_group.add_argument("-div", type=int, default=4,
             help="Div parameter for SE3-Transformer [4]")
-    str_group.add_argument('-ref_num_layers', type=int, default=1,
-            help="Number of equivariant layers in structure module block [1]")
+    str_group.add_argument('-ref_num_layers', type=int, default=2,
+            help="Number of equivariant layers in structure module block [2]")
     str_group.add_argument('-ref_num_channels', type=int, default=32,
             help="Number of channels [32]")
-
+    str_group.add_argument('-ref_l0_in_features', type=int, default=64,
+            help="Number of channels [64]")
+    str_group.add_argument('-ref_l0_out_features', type=int, default=64,
+            help="Number of channels [64]")
 
     # Loss function parameters
     loss_group = parser.add_argument_group("loss parameters")
@@ -136,6 +137,8 @@ def get_args():
             help="Weight on clash loss [0.0]")
     loss_group.add_argument('-w_pae', type=float, default=0.1,
             help="Weight on pae loss [0.1]")
+    loss_group.add_argument('-w_bind', type=float, default=5.0,
+            help="Weight on bind v no-bind prediction [5.0]")
     loss_group.add_argument('-lj_lin', type=float, default=0.75,
             help="linear inflection for lj [0.75]")
 
@@ -162,8 +165,8 @@ def get_args():
 
     #print (SE3_param)
     #print (SE3_ref_param)
-    trunk_param['SE3_param'] = SE3_param 
-    trunk_param['SE3_ref_param'] = SE3_ref_param 
+    trunk_param['SE3_param_full'] = SE3_param 
+    trunk_param['SE3_param_topk'] = SE3_ref_param 
 
     loss_param = {}
     for param in ['w_dist', 'w_str', 'w_aa', 'w_lddt', 'w_bond', 'w_dih', 'w_clash', 'w_hb', 'w_pae', 'lj_lin']:

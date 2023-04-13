@@ -35,6 +35,7 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.h = n_head
         self.dim = d_hidden
+        self.dim_out = d_out
         #
         self.to_q = nn.Linear(d_query, n_head*d_hidden, bias=False)
         self.to_k = nn.Linear(d_key, n_head*d_hidden, bias=False)
@@ -60,18 +61,38 @@ class Attention(nn.Module):
         B, Q = query.shape[:2]
         B, K = key.shape[:2]
         #
-        query = self.to_q(query).reshape(B, Q, self.h, self.dim)
-        key = self.to_k(key).reshape(B, K, self.h, self.dim)
-        value = self.to_v(value).reshape(B, K, self.h, self.dim)
-        #
-        query = query * self.scaling
-        attn = einsum('bqhd,bkhd->bhqk', query, key)
-        attn = F.softmax(attn, dim=-1)
-        #
-        out = einsum('bhqk,bkhd->bqhd', attn, value)
-        out = out.reshape(B, Q, self.h*self.dim)
-        #
-        out = self.to_out(out)
+
+        BATCHSTRIDE = 65536
+        if (B>BATCHSTRIDE and not self.training):
+            out = torch.zeros((B,Q,self.dim_out), device=query.device, dtype=query.dtype)
+            for i in range((B-1)//BATCHSTRIDE+1):
+                e_i,e_j = i*BATCHSTRIDE, min((i+1)*BATCHSTRIDE,B)
+                B_i = e_j-e_i
+                query_i = self.to_q(query[e_i:e_j]).reshape(B_i, Q, self.h, self.dim)
+                key_i = self.to_k(key[e_i:e_j]).reshape(B_i, K, self.h, self.dim)
+                value_i = self.to_v(value[e_i:e_j]).reshape(B_i, K, self.h, self.dim)
+                #
+                query_i = query_i * self.scaling
+                attn = einsum('bqhd,bkhd->bhqk', query_i, key_i)
+                attn = F.softmax(attn, dim=-1)
+                #
+                out_i = einsum('bhqk,bkhd->bqhd', attn, value_i).reshape(B_i, Q, self.h*self.dim)
+                #
+                out[e_i:e_j] = self.to_out(out_i)
+
+        else:
+            query = self.to_q(query).reshape(B, Q, self.h, self.dim)
+            key = self.to_k(key).reshape(B, K, self.h, self.dim)
+            value = self.to_v(value).reshape(B, K, self.h, self.dim)
+            #
+            query = query * self.scaling
+            attn = einsum('bqhd,bkhd->bhqk', query, key)
+            attn = F.softmax(attn, dim=-1)
+            #
+            out = einsum('bhqk,bkhd->bqhd', attn, value)
+            out = out.reshape(B, Q, self.h*self.dim)
+            #
+            out = self.to_out(out)
 
         return out
 
@@ -272,138 +293,6 @@ class MSAColGlobalAttention(nn.Module):
         out = self.to_out(out)
         return out
 
-# TriangleAttention & TriangleMultiplication from AlphaFold architecture
-class TriangleAttention(nn.Module):
-    def __init__(self, d_pair, n_head=4, d_hidden=32, p_drop=0.1, start_node=True):
-        super(TriangleAttention, self).__init__()
-        self.norm = nn.LayerNorm(d_pair)
-        self.to_q = nn.Linear(d_pair, n_head*d_hidden, bias=False)
-        self.to_k = nn.Linear(d_pair, n_head*d_hidden, bias=False)
-        self.to_v = nn.Linear(d_pair, n_head*d_hidden, bias=False)
-        
-        self.to_b = nn.Linear(d_pair, n_head, bias=False)
-        self.to_g = nn.Linear(d_pair, n_head*d_hidden)
-
-        self.to_out = nn.Linear(n_head*d_hidden, d_pair)
-
-        self.scaling = 1/math.sqrt(d_hidden)
-        
-        self.h = n_head
-        self.dim = d_hidden
-        self.start_node=start_node
-        
-        self.reset_parameter()
-
-    def reset_parameter(self):
-        # query/key/value projection: Glorot uniform / Xavier uniform
-        nn.init.xavier_uniform_(self.to_q.weight)
-        nn.init.xavier_uniform_(self.to_k.weight)
-        nn.init.xavier_uniform_(self.to_v.weight)
-        
-        # bias: normal distribution
-        self.to_b = init_lecun_normal(self.to_b)
-
-        # gating: zero weights, one biases (mostly open gate at the begining)
-        nn.init.zeros_(self.to_g.weight)
-        nn.init.ones_(self.to_g.bias)
-
-        # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
-        nn.init.zeros_(self.to_out.weight)
-        nn.init.zeros_(self.to_out.bias)
-
-    def forward(self, pair):
-        B, L = pair.shape[:2]
-
-        pair = self.norm(pair)
-        
-        # input projection
-        query = self.to_q(pair).reshape(B, L, L, self.h, -1)
-        key = self.to_k(pair).reshape(B, L, L, self.h, -1)
-        value = self.to_v(pair).reshape(B, L, L, self.h, -1)
-        bias = self.to_b(pair) # (B, L, L, h)
-        gate = torch.sigmoid(self.to_g(pair)) # (B, L, L, h*dim)
-        
-        # attention
-        query = query * self.scaling
-        if self.start_node:
-            attn = einsum('bijhd,bikhd->bijkh', query, key)
-        else:
-            attn = einsum('bijhd,bkjhd->bijkh', query, key)
-        attn = attn + bias.unsqueeze(1).expand(-1,L,-1,-1,-1) # (bijkh)
-        attn = F.softmax(attn, dim=-2)
-        if self.start_node:
-            out = einsum('bijkh,bikhd->bijhd', attn, value).reshape(B, L, L, -1)
-        else:
-            out = einsum('bijkh,bkjhd->bijhd', attn, value).reshape(B, L, L, -1)
-        out = gate * out # gated attention
-        
-        # output projection
-        out = self.to_out(out)
-        return out
-
-class TriangleMultiplication(nn.Module):
-    def __init__(self, d_pair, d_hidden=128, outgoing=True):
-        super(TriangleMultiplication, self).__init__()
-        self.norm = nn.LayerNorm(d_pair)
-        self.left_proj = nn.Linear(d_pair, d_hidden)
-        self.right_proj = nn.Linear(d_pair, d_hidden)
-        self.left_gate = nn.Linear(d_pair, d_hidden)
-        self.right_gate = nn.Linear(d_pair, d_hidden)
-        #
-        self.gate = nn.Linear(d_pair, d_pair)
-        self.norm_out = nn.LayerNorm(d_hidden)
-        self.out_proj = nn.Linear(d_hidden, d_pair)
-
-        self.outgoing = outgoing
-        
-        self.reset_parameter()
-
-    def reset_parameter(self):
-        # normal distribution for regular linear weights
-        self.left_proj = init_lecun_normal(self.left_proj)
-        self.right_proj = init_lecun_normal(self.right_proj)
-        
-        # Set Bias of Linear layers to zeros
-        nn.init.zeros_(self.left_proj.bias)
-        nn.init.zeros_(self.right_proj.bias)
-
-        # gating: zero weights, one biases (mostly open gate at the begining)
-        nn.init.zeros_(self.left_gate.weight)
-        nn.init.ones_(self.left_gate.bias)
-        
-        nn.init.zeros_(self.right_gate.weight)
-        nn.init.ones_(self.right_gate.bias)
-        
-        nn.init.zeros_(self.gate.weight)
-        nn.init.ones_(self.gate.bias)
-
-        # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
-        nn.init.zeros_(self.out_proj.weight)
-        nn.init.zeros_(self.out_proj.bias)
-    
-    def forward(self, pair):
-        B, L = pair.shape[:2]
-        pair = self.norm(pair)
-
-        left = self.left_proj(pair) # (B, L, L, d_h)
-        left_gate = torch.sigmoid(self.left_gate(pair))
-        left = left_gate * left
-        
-        right = self.right_proj(pair) # (B, L, L, d_h)
-        right_gate = torch.sigmoid(self.right_gate(pair))
-        right = right_gate * right
-        
-        if self.outgoing:
-            out = einsum('bikd,bjkd->bijd', left, right/float(L))
-        else:
-            out = einsum('bkid,bkjd->bijd', left, right/float(L))
-        out = self.norm_out(out)
-        out = self.out_proj(out)
-
-        gate = torch.sigmoid(self.gate(pair)) # (B, L, L, d_pair)
-        out = gate * out
-        return out
-
 # Instead of triangle attention, use Tied axail attention with bias from coordinates..?
 class BiasedAxialAttention(nn.Module):
     def __init__(self, d_pair, d_bias, n_head, d_hidden, p_drop=0.1, is_row=True):
@@ -418,11 +307,12 @@ class BiasedAxialAttention(nn.Module):
         self.to_b = nn.Linear(d_bias, n_head, bias=False) 
         self.to_g = nn.Linear(d_pair, n_head*d_hidden)
         self.to_out = nn.Linear(n_head*d_hidden, d_pair)
-        
+
         self.scaling = 1/math.sqrt(d_hidden)
         self.h = n_head
         self.dim = d_hidden
-        
+        self.dim_out = d_pair
+
         # initialize all parameters properly
         self.reset_parameter()
 
@@ -451,24 +341,40 @@ class BiasedAxialAttention(nn.Module):
             pair = pair.permute(0,2,1,3)
 
         pair = self.norm_pair(pair)
-        
-        query = self.to_q(pair).reshape(B, L, L, self.h, self.dim)
-        key = self.to_k(pair).reshape(B, L, L, self.h, self.dim)
-        value = self.to_v(pair).reshape(B, L, L, self.h, self.dim)
-        bias = self.to_b(bias) # (B, L, L, h)
-        gate = torch.sigmoid(self.to_g(pair)) # (B, L, L, h*dim) 
-        
-        query = query * self.scaling
-        key = key / math.sqrt(L) # normalize for tied attention
-        attn = einsum('bnihk,bnjhk->bijh', query, key) # tied attention
-        attn = attn + bias # apply bias
+
+        # fd reduce memory in inference
+        STRIDE = L
+        if (not self.training):
+            STRIDE = 4
+
+        attn = torch.zeros((B,L,L,self.h), device=pair.device, dtype=pair.dtype)
+        for i in range((L-1)//STRIDE+1):
+            rows = torch.arange(i*STRIDE, min((i+1)*STRIDE, L))
+
+            query = self.to_q(pair[:,rows]).reshape(B, -1, L, self.h, self.dim)
+            query *= self.scaling
+            key = self.to_k(pair[:,rows]).reshape(B, -1, L, self.h, self.dim)
+            key = key / math.sqrt(L) # normalize for tied attention
+
+            # add bias
+            attn[:,rows] += self.to_b(bias[:,rows]) # (B, STRIDE, L, h)
+            attn += einsum('bnihk,bnjhk->bijh', query, key) # tied attention
+
         attn = F.softmax(attn, dim=-2) # (B, L, L, h)
-        
-        out = einsum('bijh,bkjhd->bikhd', attn, value).reshape(B, L, L, -1)
-        out = gate * out
-        
-        out = self.to_out(out)
+        out = torch.zeros((B,L,L,self.dim_out), device=pair.device, dtype=pair.dtype)
+        for i in range((L-1)//STRIDE+1):
+            slices = torch.arange(i*STRIDE, min((i+1)*STRIDE, L)) # rows in value, cols in out
+
+            value = self.to_v(pair[:,slices]).reshape(B, -1, L, self.h, self.dim)
+
+            gate = torch.sigmoid(self.to_g(pair[:,:,slices])) # (B, L, L, h*dim) 
+
+            out_colslice = einsum('bijh,bkjhd->bikhd', attn, value).reshape(B, L, -1, self.h*self.dim)
+            out_colslice = gate * out_colslice
+            out[:,:,slices] += self.to_out(out_colslice)
+
         if self.is_row:
             out = out.permute(0,2,1,3)
+
         return out
 

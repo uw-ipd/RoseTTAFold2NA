@@ -1,12 +1,10 @@
 import torch
+import torch.nn as nn
 import numpy as np
-
-from util import (
-    rigid_from_3_points,
-    is_nucleic
-)
-
-from kinematics import get_dih, get_ang
+from torch import einsum
+from chemical import aa2num
+from util import rigid_from_3_points, is_nucleic
+from kinematics import get_dih
 from scoring import HbHybType
 
 # Loss functions for the training
@@ -15,16 +13,28 @@ from scoring import HbHybType
 # 3. bond geometry loss
 # 4. predicted lddt loss
 
-#fd use improved coordinate frame generation
+def calc_c6d_loss(logit_s, label_s, mask_2d, eps=1e-5):
+    loss_s = list()
+    for i in range(len(logit_s)):
+        loss = nn.CrossEntropyLoss(reduction='none')(logit_s[i], label_s[...,i]) # (B, L, L)
+        loss = (mask_2d*loss).sum() / (mask_2d.sum() + eps)
+        loss_s.append(loss)
+    loss_s = torch.stack(loss_s)
+    return loss_s
+
 def get_t(N, Ca, C, eps=1e-5):
     I,B,L=N.shape[:3]
     Rs,Ts = rigid_from_3_points(N.view(I*B,L,3), Ca.view(I*B,L,3), C.view(I*B,L,3), eps=eps)
     Rs = Rs.view(I,B,L,3,3)
     Ts = Ts.view(I,B,L,3)
     t = Ts.unsqueeze(-2) - Ts.unsqueeze(-3)
-    return torch.einsum('iblkj, iblmk -> iblmj', Rs, t) # (I,B,L,L,3) **fixed
+    return torch.einsum('iblkj, iblmk -> iblmj', Rs, t) # (I,B,L,L,3) 
 
-def calc_str_loss(pred, true, logit_pae, mask_2d, same_chain, negative=False, d_clamp_intra=10.0, d_clamp_inter=30.0, A=10.0, gamma=0.99, eps=1e-6):
+def calc_str_loss(
+    seq, pred, true, logit_pae, mask_2d, same_chain, negative=False, 
+    d_intra=10.0, d_intra_na=30.0, d_inter=30.0, 
+    A=10.0, gamma=0.99, eps=1e-6
+):
     '''
     Calculate Backbone FAPE loss
     Input:
@@ -41,8 +51,16 @@ def calc_str_loss(pred, true, logit_pae, mask_2d, same_chain, negative=False, d_
     eij_label = difference[-1].clone().detach()
 
     clamp = torch.zeros_like(difference)
-    clamp[:,same_chain==1] = d_clamp_intra
-    clamp[:,same_chain==0] = d_clamp_inter
+
+    # intra vs inter
+    clamp[:,same_chain==1] = d_intra
+    clamp[:,same_chain==0] = d_inter
+
+    # na vs prot
+    is_NA = is_nucleic(seq)
+    is_NA = is_NA[:,:,None]*is_NA[:,None,:]
+    clamp[:,is_NA] = d_intra_na
+
     difference = torch.clamp(difference, max=clamp)
     loss = difference / A # (I, B, L, L)
 
@@ -54,7 +72,8 @@ def calc_str_loss(pred, true, logit_pae, mask_2d, same_chain, negative=False, d_
     else:
         mask = mask_2d
     # calculate masked loss (ignore missing regions when calculate loss)
-    loss = (mask[None]*loss).sum(dim=(1,2,3)) / (mask.sum()+eps) # (I)
+    sub = loss[0]
+    loss = (loss[:,mask.bool()]).sum(dim=-1) / (mask.sum()+eps) # (I)
 
     # weighting loss
     w_loss = torch.pow(torch.full((I,), gamma, device=pred.device), torch.arange(I, device=pred.device))
@@ -71,9 +90,8 @@ def calc_str_loss(pred, true, logit_pae, mask_2d, same_chain, negative=False, d_
     pae_loss = torch.nn.CrossEntropyLoss(reduction='none')(
         logit_pae, true_pae_label)
 
-    pae_loss = (pae_loss * mask).sum() / (mask.sum() + eps)
+    pae_loss = (pae_loss[mask.bool()]).sum() / (mask.sum() + eps)
     return tot_loss, loss.detach(), pae_loss
-
 
 #resolve rotationally equivalent sidechains
 def resolve_symmetry(xs, Rsnat_all, xsnat, Rsnat_all_alt, xsnat_alt, atm_mask):
@@ -116,6 +134,7 @@ def torsionAngleLoss( alpha, alphanat, alphanat_alt, tors_mask, tors_planar, eps
             torch.sum(torch.square( anorm - alphanat[None] ),dim=-1),
             torch.sum(torch.square( anorm - alphanat_alt[None] ),dim=-1)
         )
+
     l_tors = torch.sum( l_tors_ij*tors_mask[None] ) / (torch.sum( tors_mask )*I + eps)
     l_norm = torch.sum( torch.abs(lnat-1.0)*tors_mask[None] ) / (torch.sum( tors_mask )*I + eps)
     l_planar = torch.sum( torch.abs( alpha[...,0] )*tors_planar[None] ) / (torch.sum( tors_planar )*I + eps)
@@ -126,9 +145,7 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
     xij = torch.einsum('rji,rsj->rsi', Rs, xs[None,...] - Ts[:,None,...])
     xij_t = torch.einsum('rji,rsj->rsi', Rsnat, xsnat[None,...] - Tsnat[:,None,...])
 
-    #torch.norm(xij-xij_t,dim=-1)
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t), dim=-1 ) + eps )
-
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean()
 
     return loss
@@ -163,7 +180,6 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
     
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
     return loss
-
 
 def angle(a, b, c, eps=1e-6):
     '''
@@ -220,8 +236,8 @@ def torsion(a,b,c,d, eps=1e-6):
     cos_sin = torch.cat([cos_angle, sin_angle], axis=-1)/(t1_norm*t2_norm+eps) #[B,L,2]
     return cos_sin
 
-# ideal N-C distance, ideal cos(CA-C-N angle), ideal cos(C-N-CA angle)
-# for NA, we do not compute this as it is not computable from the stubs alone
+# ideal N-C distance and cos(angles)
+# for NA, use P-O dist and cos(angles)
 def calc_BB_bond_geom(
     seq, idx, pred, 
     ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
@@ -236,6 +252,7 @@ def calc_BB_bond_geom(
      - bond length loss, bond angle loss
     '''
     def cosangle( A,B,C ):
+        #print (torch.isnan(A).sum(),torch.isnan(B).sum(),torch.isnan(C).sum())
         AB = A-B
         BC = C-B
         ABn = torch.sqrt( torch.sum(torch.square(AB),dim=-1) + eps)
@@ -283,22 +300,6 @@ def calc_BB_bond_geom(
 
     return blen_loss+bang_loss
 
-
-# AF2-like version of clash score
-def calc_clash(xs, mask):
-    DISTCUT=2.0 # (d_lit - tau) from AF2 MS
-    L = xs.shape[0]
-    dij = torch.sqrt(
-        torch.sum( torch.square( xs[:,:,None,None,:]-xs[None,None,:,:,:] ), dim=-1 ) + 1e-8
-    )
-
-    allmask = mask[:,:,None,None]*mask[None,None,:,:]
-    allmask[torch.arange(L),:,torch.arange(L),:] = False # ignore res-self
-    allmask[torch.arange(1,L),0,torch.arange(L-1),2] = False # ignore N->C
-    allmask[torch.arange(L-1),2,torch.arange(1,L),0] = False # ignore N->C
-
-    clash = torch.sum( torch.clamp(DISTCUT-dij[allmask],0.0) ) / torch.sum(mask)
-    return clash
 
 # LJ loss
 #  custom backwards for mem efficiency
@@ -545,7 +546,6 @@ def calc_hb(
     Es[Es > 0.1] = 0.
     return (torch.sum( Es ) / torch.sum(aamask[seq]))
 
-
 @torch.enable_grad()
 def calc_BB_bond_geom_grads(
     seq, idx, xyz, alpha, toaa, 
@@ -618,23 +618,6 @@ def calc_hb_grads(
         eps)
     return torch.autograd.grad(Ehb, (xyz,alpha))
 
-def calc_pseudo_dih(pred, true, eps=1e-6):
-    '''
-    calculate pseudo CA dihedral angle and put loss on them
-    Input:
-    - predicted & true CA coordinates (I,B,L,3) / (B, L, 3)
-    Output:
-    - dihedral angle loss
-    '''
-    I, B, L = pred.shape[:3]
-    pred = pred.reshape(I*B, L, -1)
-    true_dih = torsion(true[:,:-3,:],true[:,1:-2,:],true[:,2:-1,:],true[:,3:,:]) # (B, L', 2)
-    pred_dih = torsion(pred[:,:-3,:],pred[:,1:-2,:],pred[:,2:-1,:],pred[:,3:,:]) # (I*B, L', 2)
-    pred_dih = pred_dih.reshape(I, B, -1, 2)
-    dih_loss = torch.square(pred_dih - true_dih).sum(dim=-1).mean()
-    dih_loss = torch.sqrt(dih_loss + eps)
-    return dih_loss
-
 def calc_lddt(pred_ca, true_ca, mask_crds, mask_2d, same_chain, negative=False, interface=False, eps=1e-6):
     # Input
     # pred_ca: predicted CA coordinates (I, B, L, 3)
@@ -643,6 +626,10 @@ def calc_lddt(pred_ca, true_ca, mask_crds, mask_2d, same_chain, negative=False, 
 
     I, B, L = pred_ca.shape[:3]
     
+    
+    pred_ca = pred_ca.contiguous()
+    true_ca = true_ca.contiguous()
+
     pred_dist = torch.cdist(pred_ca, pred_ca) # (I, B, L, L)
     true_dist = torch.cdist(true_ca, true_ca).unsqueeze(0) # (1, B, L, L)
 
@@ -705,56 +692,29 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
     # pred_lddt - 1 x nbucket x L
     N, L, Natm = P.shape[:3]
 
-    # batch during inference for huge systems
-    training = P.requires_grad
-    BATCHSIZE = L
-    if (not training):
-        BATCHSIZE = 65536//L
-
     # distance matrix
-    lddtnum = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
-    lddtdenom = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
+    Pij = torch.square(P[:,:,None,:,None,:]-P[:,None,:,None,:,:]) # (N, L, L, 27, 27)
+    Pij = torch.sqrt( Pij.sum(dim=-1) + eps)
+    Qij = torch.square(Q[None,:,None,:,None,:]-Q[None,None,:,None,:,:]) # (1, L, L, 27, 27)
+    Qij = torch.sqrt( Qij.sum(dim=-1) + eps)
 
-    for i_batch in range((L-1)//BATCHSIZE + 1):
-        batchidx = torch.arange(
-            i_batch*BATCHSIZE, 
-            min( (i_batch+1)*BATCHSIZE, L),
-            device=P.device
-        )
+    # get valid pairs
+    pair_mask = torch.logical_and(Qij>0,Qij<15).float() # only consider atom pairs within 15A
+    # ignore missing atoms
+    pair_mask *= (atm_mask[:,:,None,:,None] * atm_mask[:,None,:,None,:]).float()
 
-        # subsample i
-        Pij = torch.square(P[:,batchidx,None,:,None,:]-P[:,None,:,None,:,:]) # (N, L, L, 27, 27)
-        Pij = torch.sqrt( Pij.sum(dim=-1) + eps)
-        Qij = torch.square(Q[None,batchidx,None,:,None,:]-Q[None,None,:,None,:,:]) # (1, L, L, 27, 27)
-        Qij = torch.sqrt( Qij.sum(dim=-1) + eps)
+    # ignore atoms within same residue
+    pair_mask *= (idx[:,:,None,None,None] != idx[:,None,:,None,None]).float() # (1, L, L, 27, 27)
+    if negative:
+        # ignore atoms between different chains
+        pair_mask *= same_chain.bool()[:,:,:,None,None]
 
-        # get valid pairs
-        pair_mask = torch.logical_and(Qij>0,Qij<15).float() # only consider atom pairs within 15A
-        #print ('a',pair_mask.sum())
+    delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
 
-        # ignore missing atoms
-        pair_mask *= (atm_mask[:,batchidx,None,:,None] * atm_mask[:,None,:,None,:]).float()
-        #print ('b',pair_mask.sum())
-
-        # ignore atoms within same residue
-        pair_mask *= (idx[:,batchidx,None,None,None] != idx[:,None,:,None,None]).float() # (1, L, L, 27, 27)
-        #print ('c',pair_mask.sum())
-        if negative:
-            # ignore atoms between different chains
-            pair_mask *= same_chain.bool()[:,batchidx,:,None,None]
-        elif interface:
-            # ignore atoms between the same chain
-            pair_mask *= ~same_chain.bool()[:,batchidx,:,None,None]
-        #print ('d',pair_mask.sum())
-
-        delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
-
-        for distbin in (0.5,1.0,2.0,4.0):
-            lddtnum[:,batchidx,:] += 0.25 * torch.sum( (delta_PQ<=distbin)*pair_mask, dim=(2,4) )
-        lddtdenom[:,batchidx,:] += torch.sum( pair_mask, dim=(2,4) )
-
-    lddt =  lddtnum / (lddtdenom+eps)
-    #print ('m',atm_mask[:,25:28,:3])
+    lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
+    for distbin in (0.5,1.0,2.0,4.0):
+        lddt += 0.25 * torch.sum( (delta_PQ<=distbin)*pair_mask, dim=(2,4)
+            ) / ( torch.sum( pair_mask, dim=(2,4) ) + eps)
 
     final_lddt_by_res = torch.clamp(
         (lddt[-1]*atm_mask[0]).sum(-1)
@@ -770,13 +730,15 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
 
     res_mask = atm_mask.any(dim=-1)
     lddt_loss = (lddt_loss * res_mask).sum() / (res_mask.sum() + eps)
-
+   
     # method 1: average per-residue
     #lddt = lddt.sum(dim=-1) / (atm_mask.sum(dim=-1)+1e-8) # L
     #lddt = (res_mask*lddt).sum() / (res_mask.sum() + 1e-8)
 
     # method 2: average per-atom
-    atm_mask = atm_mask * (lddtdenom>0) #(pair_mask.sum(dim=(1,3)) != 0)
+    atm_mask = atm_mask * (pair_mask.sum(dim=(1,3)) != 0)
     lddt = (lddt * atm_mask).sum(dim=(1,2)) / (atm_mask.sum() + eps)
 
     return lddt_loss, lddt
+
+

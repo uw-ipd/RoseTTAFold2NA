@@ -24,6 +24,8 @@ def get_pair_dist(a, b):
            stores paitwise distances between atoms in a and b
     """
 
+    assert(a.is_contiguous())
+    assert(b.is_contiguous())
     dist = torch.cdist(a, b, p=2)
     return dist
 
@@ -95,20 +97,16 @@ def xyz_to_c6d(xyz, params=PARAMS):
     
     batch = xyz.shape[0]
     nres = xyz.shape[1]
-
-    # three anchor atoms
-    N  = xyz[:,:,0]
+   
+    N = xyz[:,:,0]
     Ca = xyz[:,:,1]
-    C  = xyz[:,:,2]
-
-    # recreate Cb given N,Ca,C
-    Cb = generate_Cbeta(N,Ca,C)
+    C = xyz[:,:,2]
+    Cb = generate_Cbeta(N,Ca,C) # note that this doesn't really make sense for NA
 
     # 6d coordinates order: (dist,omega,theta,phi)
     c6d = torch.zeros([batch,nres,nres,4],dtype=xyz.dtype,device=xyz.device)
 
     dist = get_pair_dist(Cb,Cb)
-    dist[torch.isnan(dist)] = 999.9
     c6d[...,0] = dist + 999.9*torch.eye(nres,device=xyz.device)[None,...]
     b,i,j = torch.where(c6d[...,0]<params['DMAX'])
 
@@ -118,37 +116,35 @@ def xyz_to_c6d(xyz, params=PARAMS):
 
     # fix long-range distances
     c6d[...,0][c6d[...,0]>=params['DMAX']] = 999.9
+    c6d = torch.nan_to_num(c6d)
     
-    mask = torch.zeros((batch, nres,nres), dtype=xyz.dtype, device=xyz.device)
-    mask[b,i,j] = 1.0
-    return c6d, mask
+    return c6d
     
-def xyz_to_t2d(xyz_t, params=PARAMS):
+def xyz_to_t2d(xyz_t, mask, params=PARAMS):
     """convert template cartesian coordinates into 2d distance 
     and orientation maps
     
     Parameters
     ----------
-    xyz_t : pytorch tensor of shape [batch,templ,nres,3,3]
+    xyz_t : pytorch tensor of shape [batch,templ,nres,natm,3]
             stores Cartesian coordinates of template backbone N,Ca,C atoms
-
+    mask: pytorch tensor of shape [batch,templ,nrres,nres]
+          indicates whether valid residue pairs or not
     Returns
     -------
-    t2d : pytorch tensor of shape [batch,nres,nres,37+6+3]
+    t2d : pytorch tensor of shape [batch,nres,nres,37+6+1]
           stores stacked dist,omega,theta,phi 2D maps 
     """
     B, T, L = xyz_t.shape[:3]
-    c6d, mask = xyz_to_c6d(xyz_t[:,:,:,:3].view(B*T,L,3,3), params=params)
+    c6d = xyz_to_c6d(xyz_t[:,:,:,:3].view(B*T,L,3,3), params=params)
     c6d = c6d.view(B, T, L, L, 4)
-    mask = mask.view(B, T, L, L, 1)
-    #
+    
     # dist to one-hot encoded
-    dist = dist_to_onehot(c6d[...,0], params)
+    mask = mask[...,None]
+    dist = dist_to_onehot(c6d[...,0], params)*mask
     orien = torch.cat((torch.sin(c6d[...,1:]), torch.cos(c6d[...,1:])), dim=-1)*mask # (B, T, L, L, 6)
     #
-    mask = torch.isnan(c6d[:,:,:,:,0]) # (B, T, L, L)
-    t2d = torch.cat((dist, orien, mask.unsqueeze(-1)), dim=-1)
-    t2d[torch.isnan(t2d)] = 0.0
+    t2d = torch.cat((dist, orien, mask), dim=-1)
     return t2d
 
 def xyz_to_bbtor(xyz, params=PARAMS):
@@ -226,42 +222,3 @@ def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
         pb = torch.where(same_chain.bool(), pb.long(), params['ABINS']//2)
     
     return torch.stack([db,ob,tb,pb],axis=-1).long()
-
-def get_init_xyz(seq, xyz_t, same_chain, random_noise=5.0):
-    # input: xyz_t (B, T, L, Natms, 3)
-    # ouput: xyz (B, T, L, Natms, 3)
-    B, T, L = xyz_t.shape[:3]
-
-    init = torch.full((B,T,L,NTOTAL,3), np.nan, device=xyz_t.device)
-    na_mask = is_nucleic(seq)
-    b_nmask,l_nmask = na_mask.nonzero(as_tuple=True)
-    b_pmask,l_pmask = (~na_mask).nonzero(as_tuple=True)
-
-    init[b_pmask,:,l_pmask] = INIT_CRDS[None,...].to(xyz_t.device)
-    init[b_nmask,:,l_nmask] = INIT_NA_CRDS[None,...].to(xyz_t.device)
-    init = init + torch.rand(1,T,L,1,3,device=xyz_t.device)*random_noise
-
-    if torch.isnan(xyz_t).all():
-        return init
-
-    mask = torch.isnan(xyz_t[:,:,:,:3]).any(dim=-1).any(dim=-1) # (B, T, L)
-    #
-    center_CA = ((~mask[:,:,:,None]) * torch.nan_to_num(xyz_t[:,:,:,1,:])).sum(dim=2) / ((~mask[:,:,:,None]).sum(dim=2)+1e-4) # (B, T, 3)
-    xyz_t = xyz_t - center_CA.view(B,T,1,1,3)
-    #
-    idx_s = list()
-    for i_b in range(B):
-        for i_T in range(T):
-            if mask[i_b, i_T].all():
-                continue
-            exist_in_templ = torch.where(~mask[i_b, i_T])[0] # (L_sub)
-            is_same_chain_in_templ = same_chain[i_b][:,~mask[i_b,i_T]].bool() # (L, L_sub)
-            seqmap = (torch.arange(L, device=xyz_t.device)[:,None] - exist_in_templ[None,:]).abs() # (L, L_sub)
-            seqmap[~is_same_chain_in_templ] += 99999
-            seqmap = torch.argmin(seqmap, dim=-1) # (L)
-            idx = torch.gather(exist_in_templ, -1, seqmap) # (L)
-            offset_CA = torch.gather(xyz_t[i_b, i_T, :, 1, :], 0, idx.reshape(L,1).expand(-1,3))
-            init[i_b,i_T] += offset_CA.reshape(L,1,3)
-    #
-    xyz = torch.where(mask.view(B, T, L, 1, 1), init, xyz_t)
-    return xyz

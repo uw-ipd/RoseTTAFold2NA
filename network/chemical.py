@@ -8,8 +8,7 @@ num2aa=[
     'SER','THR','TRP','TYR','VAL',
     'UNK','MAS', 
     ' DA',' DC',' DG',' DT', ' DX',
-    '  A','  C','  G','  U', '  N',
-    'HIS_D',  # only used for cart_bonded
+    '  A','  C','  G','  U', '  N'
 ]
 
 aa2num= {x:i for i,x in enumerate(num2aa)}

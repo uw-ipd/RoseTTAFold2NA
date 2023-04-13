@@ -5,29 +5,29 @@ from torch import einsum
 import torch.utils.checkpoint as checkpoint
 from util import *
 from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal
-from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
-from Track_module import PairStr2Pair
+from Attention_module import Attention, FeedForwardLayer
+from Track_module import PairStr2Pair, PositionalEncoding2D
 from chemical import NAATOKENS,NTOTALDOFS
 
 # Module contains classes and functions to generate initial embeddings
 
-class PositionalEncoding2D(nn.Module):
-    # Add relative positional encoding to pair features
-    def __init__(self, d_model, minpos=-32, maxpos=32, p_drop=0.1):
-        super(PositionalEncoding2D, self).__init__()
-        self.minpos = minpos
-        self.maxpos = maxpos
-        self.nbin = abs(minpos)+maxpos+1
-        self.emb = nn.Embedding(self.nbin, d_model)
-    
-    def forward(self, x, idx):
-        bins = torch.arange(self.minpos, self.maxpos, device=x.device)
-        seqsep = idx[:,None,:] - idx[:,:,None] # (B, L, L)
-        #
-        ib = torch.bucketize(seqsep, bins).long() # (B, L, L)
-        emb = self.emb(ib) #(B, L, L, d_model)
-        x = x + emb # add relative positional encoding
-        return x
+# class PositionalEncoding2D(nn.Module):
+#     # Add relative positional encoding to pair features
+#     def __init__(self, d_model, minpos=-32, maxpos=32, p_drop=0.1):
+#         super(PositionalEncoding2D, self).__init__()
+#         self.minpos = minpos
+#         self.maxpos = maxpos
+#         self.nbin = abs(minpos)+maxpos+1
+#         self.emb = nn.Embedding(self.nbin, d_model)
+#     
+#     def forward(self, x, idx):
+#         bins = torch.arange(self.minpos, self.maxpos, device=x.device)
+#         seqsep = idx[:,None,:] - idx[:,:,None] # (B, L, L)
+#         #
+#         ib = torch.bucketize(seqsep, bins).long() # (B, L, L)
+#         emb = self.emb(ib) #(B, L, L, d_model)
+#         x = x + emb # add relative positional encoding
+#         return x
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
@@ -39,7 +39,7 @@ class MSA_emb(nn.Module):
         self.emb_left = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_right = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_state = nn.Embedding(NAATOKENS, d_state)
-        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, p_drop=p_drop)
+        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos)
         
         self.reset_parameter()
     
@@ -52,7 +52,7 @@ class MSA_emb(nn.Module):
 
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx):
+    def forward(self, msa, seq, idx, same_chain):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -73,7 +73,8 @@ class MSA_emb(nn.Module):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = self.pos(pair, idx) # add relative position
+        #pair = self.pos(pair, idx) # add relative position
+        pair = pair + self.pos(idx, same_chain) # add relative position
 
         # state embedding
         state = self.emb_state(seq)
@@ -111,19 +112,18 @@ class Extra_emb(nn.Module):
 # TODO: Update template embedding not to use triangles....
 # Use input xyz_t with biased attention
 class TemplatePairStack(nn.Module):
-    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, rbf_sigma=1.0, p_drop=0.25):
+    # process template pairwise features
+    # use structure-biased attention
+    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=16, p_drop=0.25):
         super(TemplatePairStack, self).__init__()
         self.n_block = n_block
-        self.rbf_sigma = rbf_sigma
         proc_s = [PairStr2Pair(d_pair=d_templ, n_head=n_head, d_hidden=d_hidden, p_drop=p_drop) for i in range(n_block)]
         self.block = nn.ModuleList(proc_s)
         self.norm = nn.LayerNorm(d_templ)
 
-    def forward(self, templ, xyz_t, use_checkpoint=False):
+    def forward(self, templ, rbf_feat, use_checkpoint=False):
         B, T, L = templ.shape[:3]
         templ = templ.reshape(B*T, L, L, -1)
-        xyz_t = xyz_t.reshape(B*T, L, -1, 3)
-        rbf_feat = rbf(torch.cdist(xyz_t[:,:,1], xyz_t[:,:,1]), self.rbf_sigma)
 
         for i_block in range(self.n_block):
             if use_checkpoint:
@@ -155,10 +155,7 @@ class Templ_emb(nn.Module):
         self.attn = Attention(d_pair, d_templ, n_head, d_hidden, d_pair, p_drop=p_drop)
         
         # process torsion angles
-        self.emb_t1d = nn.Linear(d_t1d+d_tor, d_templ)
-        self.proj_t1d = nn.Linear(d_templ, d_templ)
-        #self.tor_stack = TemplateTorsionStack(n_block=n_block, d_templ=d_templ, n_head=n_head,
-        #                                      d_hidden=d_hidden, p_drop=p_drop)
+        self.proj_t1d = nn.Linear(d_t1d+d_tor, d_templ)
         self.attn_tor = Attention(d_state, d_templ, n_head, d_hidden, d_state, p_drop=p_drop)
 
         self.reset_parameter()
@@ -167,35 +164,51 @@ class Templ_emb(nn.Module):
         self.emb = init_lecun_normal(self.emb)
         nn.init.zeros_(self.emb.bias)
 
-        nn.init.kaiming_normal_(self.emb_t1d.weight, nonlinearity='relu')
-        nn.init.zeros_(self.emb_t1d.bias)
-        
-        self.proj_t1d = init_lecun_normal(self.proj_t1d)
+        nn.init.kaiming_normal_(self.proj_t1d.weight, nonlinearity='relu')
         nn.init.zeros_(self.proj_t1d.bias)
-
-    def forward(self, t1d, t2d, alpha_t, xyz_t, pair, state, use_checkpoint=False):
-        # Input
-        #   - t1d: 1D template info (B, T, L, 30)
-        #   - t2d: 2D template info (B, T, L, L, 44)
+    
+    def _get_templ_emb(self, t1d, t2d):
         B, T, L, _ = t1d.shape
-
         # Prepare 2D template features
         left = t1d.unsqueeze(3).expand(-1,-1,-1,L,-1)
         right = t1d.unsqueeze(2).expand(-1,-1,L,-1,-1)
         #
         templ = torch.cat((t2d, left, right), -1) # (B, T, L, L, 88)
-        templ = self.emb(templ) # Template templures (B, T, L, L, d_templ)
+        return self.emb(templ) # Template templures (B, T, L, L, d_templ)
+        
+    def _get_templ_rbf(self, xyz_t, mask_t):
+        B, T, L = xyz_t.shape[:3]
+
         # process each template features
-        xyz_t = xyz_t.reshape(B*T, L, -1, 3)
-        templ = self.templ_stack(templ, xyz_t, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
+        xyz_t = xyz_t.reshape(B*T, L, 3).contiguous()
+        mask_t = mask_t.reshape(B*T, L, L)
+        assert(xyz_t.is_contiguous())
+        rbf_feat = rbf(torch.cdist(xyz_t, xyz_t)) * mask_t[...,None] # (B*T, L, L, d_rbf)
+        return rbf_feat
+    
+    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False):
+        # Input
+        #   - t1d: 1D template info (B, T, L, 22)
+        #   - t2d: 2D template info (B, T, L, L, 44)
+        #   - alpha_t: torsion angle info (B, T, L, 30)
+        #   - xyz_t: template CA coordinates (B, T, L, 3)
+        #   - mask_t: is valid residue pair? (B, T, L, L)
+        #   - pair: query pair features (B, L, L, d_pair)
+        #   - state: query state features (B, L, d_state)
+        B, T, L, _ = t1d.shape
+        
+        templ = self._get_templ_emb(t1d, t2d)
+        rbf_feat = self._get_templ_rbf(xyz_t, mask_t)
+        
+        # process each template pair feature
+        templ = self.templ_stack(templ, rbf_feat, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
 
         # Prepare 1D template torsion angle features
-        t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 30+3*17)
-        # process each template features
-        t1d = self.proj_t1d(F.relu_(self.emb_t1d(t1d)))
+        t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 22+30)
+        t1d = self.proj_t1d(t1d)
         
         # mixing query state features to template state features
-        state = state.reshape(B*L, 1, -1)
+        state = state.reshape(B*L, 1, -1) # (B*L, 1, d_state)
         t1d = t1d.permute(0,2,1,3).reshape(B*L, T, -1)
         if use_checkpoint:
             out = checkpoint.checkpoint(create_custom_forward(self.attn_tor), state, t1d, t1d)
@@ -221,14 +234,18 @@ class Templ_emb(nn.Module):
 
 
 class Recycling(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, d_state=32, rbf_sigma=1.0):
+    def __init__(self, d_msa=256, d_pair=128, d_state_in=32, d_state_out=32, rbf_sigma=1.0):
         super(Recycling, self).__init__()
-        self.proj_dist = nn.Linear(36+d_state*2, d_pair)
+        self.proj_dist = nn.Linear(64+d_state_in*2, d_pair)
         self.norm_pair = nn.LayerNorm(d_pair)
         self.proj_sctors = nn.Linear(2*NTOTALDOFS, d_msa)
         self.norm_msa = nn.LayerNorm(d_msa)
         self.rbf_sigma = rbf_sigma
-        self.norm_state = nn.LayerNorm(d_state)
+        self.norm_state = nn.LayerNorm(d_state_in)
+
+        self.proj_state = None
+        if (d_state_in != d_state_out):
+            self.proj_state = nn.Linear(d_state_in, d_state_out)
 
         self.reset_parameter()
     
@@ -237,29 +254,32 @@ class Recycling(nn.Module):
         nn.init.zeros_(self.proj_dist.bias)
         self.proj_sctors = init_lecun_normal(self.proj_sctors)
         nn.init.zeros_(self.proj_sctors.bias)
+        if (self.proj_state is not None):
+            self.proj_state = init_lecun_normal(self.proj_state)
+            nn.init.zeros_(self.proj_state.bias)
 
     def forward(self, msa, pair, xyz, state, sctors):
         B, L = pair.shape[:2]
         state = self.norm_state(state)
+        msa = self.norm_msa(msa)
+        pair = self.norm_pair(pair)
 
         left = state.unsqueeze(2).expand(-1,-1,L,-1)
         right = state.unsqueeze(1).expand(-1,L,-1,-1)
         
-        Ca_or_P = xyz[:,:,1]
-
-        # recreate Cb given N,Ca,C
-        #N  = xyz[:,:,0]
-        #C  = xyz[:,:,2]
-        #Cb = generate_Cbeta(N,Ca,C)
-        #dist = rbf(torch.cdist(Cb, Cb), self.rbf_sigma)
+        Ca_or_P = xyz[:,:,1].contiguous()
 
         dist = rbf(torch.cdist(Ca_or_P, Ca_or_P), self.rbf_sigma)
         dist = torch.cat((dist, left, right), dim=-1)
         dist = self.proj_dist(dist)
-        pair = dist + self.norm_pair(pair)
+        pair = pair + dist 
 
         sctors = self.proj_sctors(sctors.reshape(B,-1,2*NTOTALDOFS))
-        msa = sctors + self.norm_msa(msa)
+        msa = sctors + msa
+
+        if (self.proj_state is not None):
+            state = self.proj_state(state)
 
         return msa, pair, state
+
 
