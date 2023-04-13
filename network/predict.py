@@ -158,10 +158,17 @@ class Predictor():
                 ins_i = ins_i[idxs_tokeep]
             msas.append(msa_i)
             inss.append(ins_i)
-
-        msa_orig = {'msa':msas[0],'ins':inss[0]}
+        
+        msa_orig      = {'msa':msas[0],'ins':inss[0]}
+        num_res       = msa_orig['msa'].shape[1]
+        chain_index   = [0] * num_res
+        residue_index = list(np.arange(num_res) + 1)
         for i in range(1,len(Ls)):
-            msa_orig = merge_a3m_hetero(msa_orig, {'msa':msas[i],'ins':inss[i]}, [sum(Ls[:i]),Ls[i]])
+            msa_orig       = merge_a3m_hetero(msa_orig, {'msa':msas[i],'ins':inss[i]}, [sum(Ls[:i]),Ls[i]])
+            num_res        = msa_orig['msa'].shape[1] - num_res
+            chain_index   += [i] * num_res
+            residue_index += list(np.arange(num_res) + 1)
+        chain_index, residue_index = np.array(chain_index).astype(np.int64), np.array(residue_index).astype(np.int64)
         msa_orig, ins_orig = msa_orig['msa'], msa_orig['ins']
 
         # pass 2, templates
@@ -222,10 +229,10 @@ class Predictor():
         for i_trial in range(NMODELS):
             if os.path.exists("%s_%02d.pdb"%(out_prefix, i_trial)):
                 continue
-            self._run_model(Ls, msa_orig, ins_orig, t1d, t2d, xyz_t, xyz_t[:,0], alpha_t, "%s_%02d"%(out_prefix, i_trial))
+            self._run_model(Ls, msa_orig, ins_orig, t1d, t2d, xyz_t, xyz_t[:,0], alpha_t, chain_index, residue_index, "%s_%02d"%(out_prefix, i_trial))
             torch.cuda.empty_cache()
 
-    def _run_model(self, L_s, msa_orig, ins_orig, t1d, t2d, xyz_t, xyz, alpha_t, out_prefix):
+    def _run_model(self, L_s, msa_orig, ins_orig, t1d, t2d, xyz_t, xyz, alpha_t, chain_index, residue_index, out_prefix):
         with torch.no_grad():
             msa = msa_orig.long().to(self.device) # (N, L)
             ins = ins_orig.long().to(self.device)
@@ -318,9 +325,11 @@ class Predictor():
         for prob in prob_s:
             prob += 1e-8
             prob = prob / torch.sum(prob, dim=0)[None]
-        util.writepdb(out_prefix+".pdb", best_xyz[0], seq[0, -1], bfacts=100*best_lddt[0].float())
+
+        util.writepdb(out_prefix+".pdb", best_xyz[0], seq[0, -1], chain_index, residue_index, bfacts=100*best_lddt[0].float())
         prob_s = [prob.permute(1,2,0).detach().cpu().numpy().astype(np.float16) for prob in prob_s]
         np.savez_compressed("%s.npz"%(out_prefix), 
+            chain_index=chain_index,
             dist=prob_s[0].astype(np.float16), \
             lddt=best_lddt[0].detach().cpu().numpy().astype(np.float16), \
             pae=best_pae[0].detach().cpu().numpy().astype(np.float16)
