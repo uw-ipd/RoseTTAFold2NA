@@ -187,11 +187,11 @@ def parse_mixed_fasta(filename,  maxseq=10000):
         msa2[msa2 == alphabet[i]] = i
     msa2[msa2>=31] = 30  # anything unknown to 'N'
 
+    Ls = [msa1.shape[1],msa2.shape[1]]
     msa = np.concatenate((msa1,msa2),axis=-1)
-
     ins = np.zeros(msa.shape, dtype=np.uint8)
 
-    return msa,ins
+    return msa,ins,Ls
 
 # parse a fasta alignment IF it exists
 # otherwise return single-sequence msa

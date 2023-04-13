@@ -107,6 +107,11 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-8):
 def is_nucleic(seq):
     return (seq>=22)
 
+# note: needs consistency with chemical.py
+def dna_reverse_complement(seq):
+    rseq = 47 - torch.flip(seq,(-1,))
+    return rseq
+
 def idealize_reference_frame(seq, xyz_in):
     xyz = xyz_in.clone()
 
@@ -184,7 +189,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
     if idx_pdb is None:
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
-    Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
+    Bfacts = torch.clamp( bfacts.cpu(), 0, 100)
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL):

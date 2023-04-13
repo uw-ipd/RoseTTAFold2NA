@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils import data
-from parsers import parse_a3m, parse_fasta, read_template_pdb, parse_pdb_w_seq, read_templates
+from parsers import parse_a3m, parse_fasta, parse_mixed_fasta, read_template_pdb, parse_pdb_w_seq, read_templates
 from RoseTTAFoldModel  import RoseTTAFoldModule
 import util
 from collections import namedtuple
@@ -22,7 +22,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser(description="RoseTTAFold2NA")
     parser.add_argument("-inputs", help="R|Input data in format A:B:C:D, with\n"
-         "   A = P|N|R - protein, RNA, or DNA\n"
+         "   A = P or D or S or R or PR - fasta is protein, dsDNA, ssDNA, RNA, or coupled protein/RNA\n"
          "   B = multiple sequence alignment file (a3m for protein, afa for RNA, fasta for DNA)\n"
          "   C = hhpred hhr file\n"
          "   D = hhpred atab file\n"
@@ -138,34 +138,59 @@ class Predictor():
 
     def predict(self, inputs, out_prefix, ffdb, n_templ=4):
         # pass 1, combined MSA
-        Ls, msas, inss = [], [], []
+        Ls, msas, inss, types = [], [], [], []
+        has_paired = False
         for i,seq_i in enumerate(inputs):
             fseq_i =  seq_i.split(':')
             fseq_i[0] = fseq_i[0].upper()
             assert (len(fseq_i) >= 2)
-            assert (fseq_i[0] in ["P","R","D"])
+            assert (fseq_i[0] in ["P","R","D","S","PR"])
             type_i,a3m_i = fseq_i[:2]
 
-            if (fseq_i[0]=="P"):
-                msa_i, ins_i = parse_a3m(a3m_i)
+            if (fseq_i[0]=="PR"):
+                msa_i, ins_i, Ls_i = parse_mixed_fasta(a3m_i)
+                Ls.extend(Ls_i)
+                has_paired = True
             else:
-                msa_i, ins_i = parse_fasta(a3m_i, rna_alphabet=(fseq_i[0]=='R'), dna_alphabet=(fseq_i[0]=='D'))
+                if (fseq_i[0]=="P"):
+                    msa_i, ins_i = parse_a3m(a3m_i)
+                else:
+                    is_rna = fseq_i[0]=='R'
+                    is_dna = fseq_i[0]=='D' or fseq_i[0]=='S'
+                    msa_i, ins_i = parse_fasta(a3m_i, rna_alphabet=is_rna, dna_alphabet=is_dna)
+
+                _, L = msa_i.shape
+                Ls.append(L)
+
             msa_i = torch.tensor(msa_i).long()
             ins_i = torch.tensor(ins_i).long()
 
-            _, L = msa_i.shape
-            Ls.append(L)
             if (msa_i.shape[0] > MAXSEQ):
                 idxs_tokeep = np.random.permutation(msa_i.shape[0])[:MAXSEQ]
-                idxs_tokeep[0] = 0
+                idxs_tokeep[0] = 0  # keep best
                 msa_i = msa_i[idxs_tokeep]
                 ins_i = ins_i[idxs_tokeep]
+
             msas.append(msa_i)
             inss.append(ins_i)
+            types.append(fseq_i[0])
+
+            # add strand compliment
+            if (fseq_i[0]=='D'):
+                msas.append( util.dna_reverse_complement(msa_i) )
+                inss.append( ins_i.clone() )
+                Ls.append(L)
+                types.append(fseq_i[0])
 
         msa_orig = {'msa':msas[0],'ins':inss[0]}
-        for i in range(1,len(Ls)):
-            msa_orig = merge_a3m_hetero(msa_orig, {'msa':msas[i],'ins':inss[i]}, [sum(Ls[:i]),Ls[i]])
+        if (has_paired):
+            if (len(Ls)!=2 or len(msas)!=1):
+                print ("ERROR: Paired Protein/NA fastas can not be combined with other inputs!")
+                assert (False)
+        else:
+            for i in range(1,len(Ls)):
+                msa_orig = merge_a3m_hetero(msa_orig, {'msa':msas[i],'ins':inss[i]}, [sum(Ls[:i]),Ls[i]])
+
         msa_orig, ins_orig = msa_orig['msa'], msa_orig['ins']
 
         # pass 2, templates
@@ -193,16 +218,8 @@ class Predictor():
                 mask_t[:ntmpl_i,startres:stopres,:] = mask_t_i
 
         same_chain = torch.zeros((1,L,L), dtype=torch.bool, device=xyz_t.device)
-        Lcuts = [0]
-        for i in range(1,len(Ls)):
-            if (
-                (inputs[i-1][0] == 'P') or
-                (inputs[i-1][0] != 'P' and inputs[i][0] == 'P')
-            ):
-                Lcuts.append(i)
-
         stopres = 0
-        for i in range(1,len(Lcuts)):
+        for i in range(1,len(Ls)):
             startres,stopres = sum(Ls[:(i-1)]), sum(Ls[:i])
             same_chain[:,startres:stopres,startres:stopres] = True
         same_chain[:,stopres:,stopres:] = True
@@ -228,7 +245,6 @@ class Predictor():
 
         self.model.eval()
         for i_trial in range(NMODELS):
-            print ("%s_%02d.pdb"%(out_prefix, i_trial))
             if os.path.exists("%s_%02d.pdb"%(out_prefix, i_trial)):
                 continue
             self._run_model(Ls, msa_orig, ins_orig, t1d, t2d, xyz_t, xyz_t[:,0], alpha_t, same_chain, mask_t_2d, "%s_%02d"%(out_prefix, i_trial))

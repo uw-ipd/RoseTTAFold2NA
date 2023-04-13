@@ -1333,7 +1333,7 @@ def loader_na_complex(item, Ls, padding, params, native_NA_frac=0.05, negative=F
     NAchn = pdb_ids[1].split('_')[1]
     sharedMSA = params['NA_DIR']+'/msas/'+pdb_ids[0][1:3]+'/'+pdb_ids[0][:4]+'/'+pdb_ids[0]+'_'+NAchn+'_paired.a3m'
     if (len(pdb_ids)==2 and exists(sharedMSA)):
-        msa,ins = parse_mixed_fasta(sharedMSA)
+        msa,ins,_ = parse_mixed_fasta(sharedMSA)
         if (msa.shape[1] != sum(Ls)):
             print ("Error shared MSA",pdb_ids, msa.shape, Ls)
         else:

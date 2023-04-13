@@ -48,7 +48,6 @@ function proteinMSA {
         echo "Running hhsearch"
         HH="hhsearch -b 50 -B 500 -z 50 -Z 500 -mact 0.05 -cpu $CPU -maxmem $MEM -aliw 100000 -e 100 -p 5.0 -d $HHDB"
         echo " -> Running command: $HH -i $WDIR/$tag.msa0.ss2.a3m -o $WDIR/$tag.hhr -atab $WDIR/$tag.atab -v 0"
-        cat $WDIR/$tag.ss2 $WDIR/$tag.msa0.a3m > $WDIR/$tag.msa0.ss2.a3m
         $HH -i $WDIR/$tag.msa0.a3m -o $WDIR/$tag.hhr -atab $WDIR/$tag.atab -v 0 > $WDIR/log/hhsearch.$tag.stdout 2> $WDIR/log/hhsearch.$tag.stderr
     fi
 }
@@ -94,9 +93,15 @@ do
         argstring+="R:$WDIR/$tag.afa "
         nR=$((nR+1))
         lastR="$tag"
-    else [ $type = 'D' ]
+    elif [ $type = 'D' ]
+    then
         cp $fasta $WDIR/$tag.fa
         argstring+="D:$WDIR/$tag.fa "
+        nD=$((nD+2))
+    elif [ $type = 'S' ]
+    then
+        cp $fasta $WDIR/$tag.fa
+        argstring+="S:$WDIR/$tag.fa "
         nD=$((nD+1))
     fi
 done
