@@ -1,6 +1,12 @@
 # RF2NA
 GitHub repo for RoseTTAFold2 with nucleic acids
 
+New: April 13, 2023 v0.2
+New features include:
+* Updated weights for better prediction of homodimer:DNA interactions and better DNA-specific sequence recognition
+* Bugfixes in MSA generation pipeline
+* Support for paired protein/RNA MSAs
+
 ## Installation
 
 1. Clone the package
@@ -25,8 +31,8 @@ python setup.py install
 3. Download pre-trained weights under network directory
 ```
 cd network
-wget https://files.ipd.uw.edu/dimaio/RF2NA_sep22.tgz
-tar xvfz RF2NA_sep22.tgz
+wget https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz
+tar xvfz RF2NA_apr23.tgz
 ls weights/ # it should contain a 800mb weights file
 cd ..
 ```
@@ -73,9 +79,13 @@ cd ..
 ```
 conda activate RF2NA
 cd example
-../run_RF2NA.sh t000_ protein.fa R:RNA.fa
+# run Protein/RNA prediction
+../run_RF2NA.sh rna_pred rna_binding_protein.fa R:RNA.fa
+# run Protein/dsDNA prediction
+../run_RF2NA.sh dna_pred dna_binding_protein.fa D:DNA.fa
+
 ```
-The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` to specify protein, RNA, DNA respectively (default is protein).  Each chain is a separate file (e.g., for double-stranded DNA, both strands need to be provided as separate fasta files).  Outputs are written to the folder `t000_`.
+The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` `S:xxx.fa` and `PR:xxx.fa` to specify protein, RNA, dsDNA, ssDNA, and paired protein/RNA respectively (default is protein).  Each chain is a separate file; 'D' will automatically generate the complementary strand.  Outputs are written to the folder `rna_pred_` and `rna_pred_`.
 
 ## Expected outputs
-You will get a prediction with estimated per-residue LDDT in the B-factor column (model_00.pdb)
+You will get a prediction with estimated per-residue LDDT in the B-factor column (`models/model_00.pdb`)
