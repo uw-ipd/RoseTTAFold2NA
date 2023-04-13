@@ -1,9 +1,8 @@
 # RF2NA
 GitHub repo for RoseTTAFold2 with nucleic acids
 
-New: April 13, 2023 v0.2
-New features include:
-* Updated weights for better prediction of homodimer:DNA interactions and better DNA-specific sequence recognition
+**New: April 13, 2023 v0.2**
+* Updated weights (https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz) for better prediction of homodimer:DNA interactions and better DNA-specific sequence recognition
 * Bugfixes in MSA generation pipeline
 * Support for paired protein/RNA MSAs
 
@@ -33,7 +32,7 @@ python setup.py install
 cd network
 wget https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz
 tar xvfz RF2NA_apr23.tgz
-ls weights/ # it should contain a 800mb weights file
+ls weights/ # it should contain a 1.1GB weights file
 cd ..
 ```
 
