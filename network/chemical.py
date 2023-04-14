@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 
+PDB_CHAIN_IDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
 num2aa=[
     'ALA','ARG','ASN','ASP','CYS',
     'GLN','GLU','GLY','HIS','ILE',
@@ -8,8 +10,7 @@ num2aa=[
     'SER','THR','TRP','TYR','VAL',
     'UNK','MAS', 
     ' DA',' DC',' DG',' DT', ' DX',
-    '  A','  C','  G','  U', '  N',
-    'HIS_D',  # only used for cart_bonded
+    '  A','  C','  G','  U', '  N'
 ]
 
 aa2num= {x:i for i,x in enumerate(num2aa)}

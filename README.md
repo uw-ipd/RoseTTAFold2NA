@@ -1,6 +1,11 @@
 # RF2NA
 GitHub repo for RoseTTAFold2 with nucleic acids
 
+**New: April 13, 2023 v0.2**
+* Updated weights (https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz) for better prediction of homodimer:DNA interactions and better DNA-specific sequence recognition
+* Bugfixes in MSA generation pipeline
+* Support for paired protein/RNA MSAs
+
 ## Installation
 
 1. Clone the package
@@ -25,9 +30,9 @@ python setup.py install
 3. Download pre-trained weights under network directory
 ```
 cd network
-wget https://files.ipd.uw.edu/dimaio/RF2NA_sep22.tgz
-tar xvfz RF2NA_sep22.tgz
-ls weights/ # it should contain a 800mb weights file
+wget https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz
+tar xvfz RF2NA_apr23.tgz
+ls weights/ # it should contain a 1.1GB weights file
 cd ..
 ```
 
@@ -62,7 +67,7 @@ wget ftp://ftp.ebi.ac.uk/pub/databases/RNAcentral/current_release/rfam/rfam_anno
 wget ftp://ftp.ebi.ac.uk/pub/databases/RNAcentral/current_release/id_mapping/id_mapping.tsv.gz
 wget ftp://ftp.ebi.ac.uk/pub/databases/RNAcentral/current_release/sequences/rnacentral_species_specific_ids.fasta.gz
 ../input_prep/reprocess_rnac.pl id_mapping.tsv.gz rfam_annotations.tsv.gz   # ~8 minutes
-gunzip -c rnacentral_species_specific_ids.fasta.gz | makeblastdb -in - -dbtype nucl  -out rnacentral.fasta -title "RNACentral"
+gunzip -c rnacentral_species_specific_ids.fasta.gz | makeblastdb -in - -dbtype nucl  -parse_seqids -out rnacentral.fasta -title "RNACentral"
 
 # nt [151G]
 update_blastdb.pl --decompress nt
@@ -73,9 +78,15 @@ cd ..
 ```
 conda activate RF2NA
 cd example
-../run_RF2NA.sh t000_ protein.fa R:RNA.fa
+# run Protein/RNA prediction
+../run_RF2NA.sh rna_pred rna_binding_protein.fa R:RNA.fa
+# run Protein/dsDNA prediction
+../run_RF2NA.sh dna_pred dna_binding_protein.fa D:DNA.fa
+
 ```
-The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` to specify protein, RNA, DNA respectively (default is protein).  Each chain is a separate file (e.g., for double-stranded DNA, both strands need to be provided as separate fasta files).  Outputs are written to the folder `t000_`.
+The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` `S:xxx.fa` and `PR:xxx.fa` to specify protein, RNA, dsDNA, ssDNA, and paired protein/RNA respectively (default is protein).  
+
+Each chain is a separate file; 'D' will automatically generate a complementary DNA strand to the input strand.  Outputs are written to the folder `dna_pred` and `rna_pred`.
 
 ## Expected outputs
-You will get a prediction with estimated per-residue LDDT in the B-factor column (model_00.pdb)
+You will get a prediction with estimated per-residue LDDT in the B-factor column (`models/model_00.pdb`)

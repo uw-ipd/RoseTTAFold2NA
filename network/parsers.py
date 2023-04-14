@@ -9,7 +9,7 @@ import util
 import gzip
 from ffindex import *
 import torch
-from chemical import NAATOKENS, aa2num, aa2long, NTOTAL, NTOTALDOFS, NAATOKENS
+from chemical import aa2num, aa2long, NTOTAL, NTOTALDOFS, NAATOKENS, INIT_CRDS
 import chemical
 
 to1letter = {
@@ -74,6 +74,61 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
     fstream = open(filename,"r")
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+    table_na = {}
+
+    for line in fstream:
+        # skip labels
+        if line[0] == '>':
+            continue
+            
+        # remove right whitespaces
+        line = line.rstrip()
+
+        if len(line) == 0:
+            continue
+
+        # remove lowercase letters and append to MSA
+        msa_i = line.translate(table)
+        msa.append(msa_i)
+
+        # sequence length
+        L = len(msa[-1])
+
+        i = np.zeros((L))
+        ins.append(i)
+
+    #msa_orig = msa.copy()
+
+    # convert letters into numbers
+    if rna_alphabet:
+        alphabet = np.array(list("00000000000000000000-000000ACGUN"), dtype='|S1').view(np.uint8)
+    elif dna_alphabet:
+        alphabet = np.array(list("00000000000000000000-0ACGTD00000"), dtype='|S1').view(np.uint8)
+    else:
+        alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-X0000000000"), dtype='|S1').view(np.uint8)
+    msa = np.array([list(s) for s in msa], dtype='|S1').view(np.uint8)
+
+    for i in range(alphabet.shape[0]):
+        msa[msa == alphabet[i]] = i
+
+    # also accept 'T' in rna_alphabet
+    if rna_alphabet:
+        msa[msa == ord("T")] = 30
+
+    # fail on any illegal characters
+    assert (np.all(msa<=31))
+
+    ins = np.array(ins, dtype=np.uint8)
+
+    return msa,ins
+
+def parse_mixed_fasta(filename,  maxseq=10000):
+    msa1,msa2 = [],[]
+
+    fstream = open(filename,"r")
+    table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+
+    unpaired_r, unpaired_p = 0, 0
 
     for line in fstream:
         # skip labels
@@ -89,39 +144,53 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
         # remove lowercase letters and append to MSA
         msa_i = line.translate(table)
         msa_i = msa_i.replace('B','D') # hacky...
-        msa.append(msa_i)
 
-        # sequence length
-        L = len(msa[-1])
+        msas_i = msa_i.split('/')
 
-        i = np.zeros((L))
-        ins.append(i)
+        if (len(msas_i)==1):
+            msas_i = [msas_i[0][:len(msa1[0])], msas_i[0][len(msa1[0]):]]
 
-    #msa_orig = msa.copy()
+        if (len(msa1)==0 or (
+            len(msas_i[0])==len(msa1[0]) and len(msas_i[1])==len(msa2[0])
+        )):
+            # skip if we've already found half of our limit in unpaired protein seqs
+            if sum([1 for x in msas_i[1] if x != '-']) == 0:
+                unpaired_p += 1
+                if unpaired_p > maxseq // 2:
+                    continue
+
+            # skip if we've already found half of our limit in unpaired rna seqs
+            if sum([1 for x in msas_i[0] if x != '-']) == 0:
+                unpaired_r += 1
+                if unpaired_r > maxseq // 2:
+                    continue
+
+            msa1.append(msas_i[0])
+            msa2.append(msas_i[1])
+        else:
+            print ("Len error",filename, len(msas_i[0]),len(msa1[0]),len(msas_i[1]),len(msas_i[1]))
+
+        if (len(msa1) >= maxseq):
+            break
 
     # convert letters into numbers
-    if rna_alphabet:
-        alphabet = np.array(list("00000000000000000000-000000ACGTN"), dtype='|S1').view(np.uint8)
-    elif dna_alphabet:
-        alphabet = np.array(list("00000000000000000000-0ACGTD00000"), dtype='|S1').view(np.uint8)
-    else:
-        alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
-    msa = np.array([list(s) for s in msa], dtype='|S1').view(np.uint8)
-
+    alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
+    msa1 = np.array([list(s) for s in msa1], dtype='|S1').view(np.uint8)
     for i in range(alphabet.shape[0]):
-        msa[msa == alphabet[i]] = i
+        msa1[msa1 == alphabet[i]] = i
+    msa1[msa1>=31] = 21  # anything unknown to 'X'
 
-    # also accept 'U' in rna_alphabet
-    if rna_alphabet:
-        msa[msa == ord("U")] = 30
+    alphabet = np.array(list("00000000000000000000-000000ACGTN"), dtype='|S1').view(np.uint8)
+    msa2 = np.array([list(s) for s in msa2], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msa2[msa2 == alphabet[i]] = i
+    msa2[msa2>=31] = 30  # anything unknown to 'N'
 
+    Ls = [msa1.shape[1],msa2.shape[1]]
+    msa = np.concatenate((msa1,msa2),axis=-1)
+    ins = np.zeros(msa.shape, dtype=np.uint8)
 
-    #print ((msa>40).nonzero()) 
-    #print (msa_orig[6788]) 
-
-    ins = np.array(ins, dtype=np.uint8)
-
-    return msa,ins
+    return msa,ins,Ls
 
 # parse a fasta alignment IF it exists
 # otherwise return single-sequence msa
@@ -159,11 +228,10 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
 
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
 
-    # read file line by line
-    if (unzip):
-        fstream = gzip.open(filename,"rt")
+    if filename.split('.')[-1] == 'gz':
+        fstream = gzip.open(filename, 'rt')
     else:
-        fstream = open(filename,"r")
+        fstream = open(filename, 'r')
 
     for line in fstream:
 
@@ -391,94 +459,101 @@ def parse_templates(item, params):
         
     return xyz,mask,qmap,f0d,f1d,ids
 
-def parse_templates_raw(ffdb, hhr_fn, atab_fn):
+def parse_templates_raw(ffdb, hhr_fn, atab_fn, templ_to_use, max_templ=20):
     # process tabulated hhsearch output to get
     # matched positions and positional scores
     hits = []
+    read_stat = False
     for l in open(atab_fn, "r").readlines():
         if l[0]=='>':
+            read_stat = False
+            if len(hits) == max_templ:
+                break
             key = l[1:].split()[0]
+            if len(templ_to_use) > 1:
+                if key not in templ_to_use:
+                    continue
+            read_stat = True
             hits.append([key,[],[]])
         elif "score" in l or "dssp" in l:
+            continue
+        elif not read_stat:
             continue
         else:
             hi = l.split()[:5]+[0.0,0.0,0.0]
             hits[-1][1].append([int(hi[0]),int(hi[1])])
             hits[-1][2].append([float(hi[2]),float(hi[3]),float(hi[4])])
 
-    # get per-hit statistics from an .hhr file
-    # (!!! assume that .hhr and .atab have the same hits !!!)
-    # [Probab, E-value, Score, Aligned_cols, 
-    # Identities, Similarity, Sum_probs, Template_Neff]
-    lines = open(hhr_fn, "r").readlines()
-    pos = [i+1 for i,l in enumerate(lines) if l[0]=='>']
-    for i,posi in enumerate(pos):
-        hits[i].append([float(s) for s in re.sub('[=%]',' ',lines[posi]).split()[1::2]])
-        
     # parse templates from FFDB
     for hi in hits:
         #if hi[0] not in ffids:
         #    continue
         entry = get_entry_by_name(hi[0], ffdb.index)
         if entry == None:
+            print ("Failed to find %s in *_pdb.ffindex"%hi[0])
             continue
         data = read_entry_lines(entry, ffdb.data)
-        hi += list(parse_pdb_lines_w_seq(data))[1:5]
+        hi += list(parse_pdb_lines_w_seq(data))[1:5] # (add four more items)
 
     # process hits
     counter = 0
-    xyz,qmap,mask,f0d,f1d,ids,seq = [],[],[],[],[],[],[]
+    xyz,qmap,mask,f1d,ids,seq = [],[],[],[],[],[]
     for data in hits:
         if len(data)<7:
             continue
+        #print ("Process %s..."%data[0])
         
         qi,ti = np.array(data[1]).T
-        _,sel1,sel2 = np.intersect1d(ti, data[6], return_indices=True)
+        _,sel1,sel2 = np.intersect1d(ti, data[5], return_indices=True)
         ncol = sel1.shape[0]
         if ncol < 10:
             continue
         
         ids.append(data[0])
-        f0d.append(data[3])
         f1d.append(np.array(data[2])[sel1])
-        xyz.append(data[4][sel2])
-        mask.append(data[5][sel2])
+        xyz.append(data[3][sel2])
+        mask.append(data[4][sel2])
         seq.append(data[-1][sel2])
         qmap.append(np.stack([qi[sel1]-1,[counter]*ncol],axis=-1))
         counter += 1
-
+    
     xyz = np.vstack(xyz).astype(np.float32)
+    mask = np.vstack(mask).astype(np.float32)
     qmap = np.vstack(qmap).astype(np.long)
     f1d = np.vstack(f1d).astype(np.float32)
     seq = np.hstack(seq).astype(np.long)
     ids = ids
 
-    return torch.from_numpy(xyz), torch.from_numpy(qmap), \
+    return torch.from_numpy(xyz), torch.from_numpy(mask), torch.from_numpy(qmap), \
            torch.from_numpy(f1d), torch.from_numpy(seq), ids
 
-def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
-    xyz_t, qmap, t1d, seq, ids = parse_templates_raw(ffdb, hhr_fn, atab_fn)
+def read_templates(qlen, ffdb, hhr_fn, atab_fn, templ_to_use=[], offset=0, n_templ=10, random_noise=5.0):
+    xyz_t, mask, qmap, t1d, seq, ids = parse_templates_raw(ffdb, hhr_fn, atab_fn, templ_to_use, max_templ=max(n_templ, 20))
     npick = min(n_templ, len(ids))
     if npick < 1: # no templates
-        xyz = torch.full((1,qlen,NTOTAL,3),np.nan).float()
+        xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(npick,qlen,1,1) + torch.rand(npick,qlen,1,3)*random_noise
         t1d = torch.nn.functional.one_hot(torch.full((1, qlen), 20).long(), num_classes=NAATOKENS-1).float() # all gaps
         t1d = torch.cat((t1d, torch.zeros((1,qlen,1)).float()), -1)
         return xyz, t1d
 
     sample = torch.arange(npick)
     #
-    xyz = torch.full((npick, qlen, NTOTAL, 3), np.nan).float()
-    f1d = torch.full((npick, qlen), 20).long()
+    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(npick,qlen,1,1) + torch.rand(npick,qlen,1,3)*random_noise
+    mask_t = torch.full((npick,qlen,NTOTAL),False) # True for valid atom, False for missing atom
+    f1d = torch.full((npick, qlen), 20).long() # gap token
     f1d_val = torch.zeros((npick, qlen, 1)).float()
     #
     for i, nt in enumerate(sample):
         sel = torch.where(qmap[:,1] == nt)[0]
-        pos = qmap[sel, 0]
+        pos = qmap[sel, 0] + offset
         xyz[i, pos] = xyz_t[sel]
+        mask_t[i,pos] = mask[sel].bool()
         f1d[i, pos] = seq[sel]
         f1d_val[i,pos] = t1d[sel, 2].unsqueeze(-1)
+        #
+        xyz[i] = util.center_and_realign_missing(xyz[i], mask_t[i])
     
     f1d = torch.nn.functional.one_hot(f1d, num_classes=NAATOKENS-1).float()
     f1d = torch.cat((f1d, f1d_val), dim=-1)
-
-    return xyz, f1d
+    
+    return xyz, f1d, mask_t

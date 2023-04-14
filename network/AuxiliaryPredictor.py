@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
 from chemical import NAATOKENS
 
 class DistanceNetwork(nn.Module):
@@ -38,9 +37,6 @@ class DistanceNetwork(nn.Module):
 class MaskedTokenNetwork(nn.Module):
     def __init__(self, n_feat, p_drop=0.1):
         super(MaskedTokenNetwork, self).__init__()
-
-        #fd note this predicts probability for the mask token (which is never in ground truth)
-        #   it should be ok though(?)
         self.proj = nn.Linear(n_feat, NAATOKENS)
         
         self.reset_parameter()
@@ -76,7 +72,6 @@ class PAENetwork(nn.Module):
         super(PAENetwork, self).__init__()
         self.proj = nn.Linear(n_feat, n_bin_pae)
         self.reset_parameter()
-
     def reset_parameter(self):
         nn.init.zeros_(self.proj.weight)
         nn.init.zeros_(self.proj.bias)
@@ -90,5 +85,25 @@ class PAENetwork(nn.Module):
 
         return logits.permute(0,3,1,2)
 
+class BinderNetwork(nn.Module):
+    def __init__(self, n_hidden=64, n_bin_pae=64):
+        super(BinderNetwork, self).__init__()
+        #self.proj = nn.Linear(n_bin_pae, n_hidden)
+        #self.classify = torch.nn.Linear(2*n_hidden, 1)
+        self.classify = torch.nn.Linear(n_bin_pae, 1)
+        self.reset_parameter()
 
+    def reset_parameter(self):
+        #nn.init.zeros_(self.proj.weight)
+        #nn.init.zeros_(self.proj.bias)
+        nn.init.zeros_(self.classify.weight)
+        nn.init.zeros_(self.classify.bias)
 
+    def forward(self, pae, same_chain):
+        #logits = self.proj( pae.permute(0,2,3,1) )
+        logits = pae.permute(0,2,3,1)
+        #logits_intra = torch.mean( logits[same_chain==1], dim=0 )
+        logits_inter = torch.mean( logits[same_chain==0], dim=0 ).nan_to_num() # all zeros if single chain
+        #prob = torch.sigmoid( self.classify( torch.cat((logits_intra,logits_inter)) ) )
+        prob = torch.sigmoid( self.classify( logits_inter ) )
+        return prob

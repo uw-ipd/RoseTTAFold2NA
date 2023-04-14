@@ -4,10 +4,40 @@ import numpy as np
 import torch
 
 import scipy.sparse
+from scipy.spatial.transform import Rotation
 
 from chemical import *
 from scoring import *
 
+def random_rot_trans(xyz, random_noise=20.0):
+    # xyz: (N, L, 27, 3)
+    N, L = xyz.shape[:2]
+
+    # pick random rotation axis
+    R_mat = torch.tensor(Rotation.random(N).as_matrix(), dtype=xyz.dtype).to(xyz.device)
+    xyz = torch.einsum('nij,nlaj->nlai', R_mat, xyz) + torch.rand(N,1,1,3, device=xyz.device)*random_noise
+    return xyz
+
+def center_and_realign_missing(xyz, mask_t):
+    # xyz: (L, 27, 3)
+    # mask_t: (L, 27)
+    L = xyz.shape[0]
+    
+    mask = mask_t[:,:3].all(dim=-1) # True for valid atom (L)
+    
+    # center c.o.m at the origin
+    center_CA = (mask[...,None]*xyz[:,1]).sum(dim=0) / (mask[...,None].sum(dim=0) + 1e-5) # (3)
+    xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
+    
+    # move missing residues to the closest valid residues
+    exist_in_xyz = torch.where(mask)[0] # L_sub
+    seqmap = (torch.arange(L, device=xyz.device)[:,None] - exist_in_xyz[None,:]).abs() # (L, Lsub)
+    seqmap = torch.argmin(seqmap, dim=-1) # L
+    idx = torch.gather(exist_in_xyz, 0, seqmap)
+    offset_CA = torch.gather(xyz[:,1], 0, idx.reshape(L,1).expand(-1,3))
+    xyz = torch.where(mask.view(L,1,1), xyz, xyz + offset_CA.reshape(L,1,3))
+
+    return xyz
 
 def th_ang_v(ab,bc,eps:float=1e-8):
     def th_norm(x,eps:float=1e-8):
@@ -77,6 +107,11 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-8):
 def is_nucleic(seq):
     return (seq>=22)
 
+# note: needs consistency with chemical.py
+def dna_reverse_complement(seq):
+    rseq = 47 - torch.flip(seq,(-1,))
+    return rseq
+
 def idealize_reference_frame(seq, xyz_in):
     xyz = xyz_in.clone()
 
@@ -99,100 +134,6 @@ def idealize_reference_frame(seq, xyz_in):
     xyz[nmask_bs,nmask_rs,2,:] = torch.einsum('...ij,j->...i', Rs[nmask_bs,nmask_rs], OP2ideal) + Ts[nmask_bs,nmask_rs]
 
     return xyz
-
-# works for both dna and protein
-# alphas in order:
-#    omega/phi/psi: 0-2
-#    chi_1-4(prot): 3-6
-#    cb/cg bend: 7-9
-#    eps(p)/zeta(p): 10-11
-#    alpha/beta/gamma/delta: 12-15
-#    nu2/nu1/nu0: 16-18
-#    chi_1(na): 19
-def get_tor_mask(seq, torsion_indices, mask_in=None):
-    B,L = seq.shape[:2]
-    dna_mask = is_nucleic(seq)
-    prot_mask = ~dna_mask
-
-    tors_mask = torsion_indices[seq,:,-1] > 0
-
-    if mask_in != None:
-        N = mask_in.shape[2]
-        ts = torsion_indices[seq]
-        bs = torch.arange(B, device=seq.device)[:,None,None,None]
-        rs = torch.arange(L, device=seq.device)[None,:,None,None] - (ts<0)*1 # ts<-1 ==> prev res
-        ts = torch.abs(ts)
-        tors_mask *= mask_in[bs,rs,ts].all(dim=-1)
-
-    return tors_mask
-
-
-def get_torsions(xyz_in, seq, torsion_indices, torsion_can_flip, ref_angles, mask_in=None):
-    B,L = xyz_in.shape[:2]
-
-    tors_mask = get_tor_mask(seq, torsion_indices, mask_in)
-    # idealize given xyz coordinates before computing torsion angles
-    xyz = idealize_reference_frame(seq, xyz_in)
-
-    ts = torsion_indices[seq]
-    bs = torch.arange(B, device=xyz_in.device)[:,None,None,None]
-    xs = torch.arange(L, device=xyz_in.device)[None,:,None,None] - (ts<0)*1 # ts<-1 ==> prev res
-    ys = torch.abs(ts)
-    xyzs_bytor = xyz[bs,xs,ys,:]
-
-    torsions = torch.zeros( (B,L,NTOTALDOFS,2), device=xyz_in.device )
-    torsions[...,:7,:] = th_dih(
-        xyzs_bytor[...,:7,0,:],xyzs_bytor[...,:7,1,:],xyzs_bytor[...,:7,2,:],xyzs_bytor[...,:7,3,:]
-    )
-    torsions[:,:,2,:] = -1 * torsions[:,:,2,:] # shift psi by pi
-    torsions[...,10:,:] = th_dih(
-        xyzs_bytor[...,10:,0,:],xyzs_bytor[...,10:,1,:],xyzs_bytor[...,10:,2,:],xyzs_bytor[...,10:,3,:]
-    )
-
-    # angles (hardcoded)
-    # CB bend
-    NC = 0.5*( xyz[:,:,0,:3] + xyz[:,:,2,:3] )
-    CA = xyz[:,:,1,:3]
-    CB = xyz[:,:,4,:3]
-    t = th_ang_v(CB-CA,NC-CA)
-    t0 = ref_angles[seq][...,0,:]
-    torsions[:,:,7,:] = torch.stack( 
-        (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
-        dim=-1 )
-    
-    # CB twist
-    NCCA = NC-CA
-    NCp = xyz[:,:,2,:3] - xyz[:,:,0,:3]
-    NCpp = NCp - torch.sum(NCp*NCCA, dim=-1, keepdim=True)/ torch.sum(NCCA*NCCA, dim=-1, keepdim=True) * NCCA
-    t = th_ang_v(CB-CA,NCpp)
-    t0 = ref_angles[seq][...,1,:]
-    torsions[:,:,8,:] = torch.stack( 
-        (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
-        dim=-1 )
-
-    # CG bend
-    CG = xyz[:,:,5,:3]
-    t = th_ang_v(CG-CB,CA-CB)
-    t0 = ref_angles[seq][...,2,:]
-    torsions[:,:,9,:] = torch.stack( 
-        (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
-        dim=-1 )
-    
-    mask0 = (torch.isnan(torsions[...,0])).nonzero()
-    mask1 = (torch.isnan(torsions[...,1])).nonzero()
-    torsions[mask0[:,0],mask0[:,1],mask0[:,2],0] = 1.0
-    torsions[mask1[:,0],mask1[:,1],mask1[:,2],1] = 0.0
-
-    # alt chis
-    torsions_alt = torsions.clone()
-    torsions_alt[torsion_can_flip[seq,:]] *= -1
-
-    # torsions to restrain to 0 or 180 degree
-    # (this should be specified in chemical?)
-    tors_planar = torch.zeros((B, L, NTOTALDOFS), dtype=torch.bool, device=xyz_in.device)
-    tors_planar[:,:,5] = seq == aa2num['TYR'] # TYR chi 3 should be planar
-
-    return torsions, torsions_alt, tors_mask, tors_planar
 
 def get_frames(xyz_in, xyz_mask, seq, frame_indices):
     B,L = xyz_in.shape[:2]
@@ -237,7 +178,7 @@ def get_tips(xyz, seq):
 
 
 # writepdb
-def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
+def writepdb(filename, atoms, seq, Ls, idx_pdb=None, bfacts=None):
     f = open(filename,"w")
     ctr = 1
     scpu = seq.cpu().squeeze(0)
@@ -248,7 +189,8 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
     if idx_pdb is None:
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
-    Bfacts = torch.clamp(bfacts.cpu(), 0, 100)
+    Bfacts = torch.clamp( bfacts.cpu(), 0, 100)
+    chn_idx, res_idx = 0, 0
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL):
@@ -257,7 +199,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
 
         atms = aa2long[s]
 
-        # his prot hack
+        # his protonation state hack
         if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
             atms = (
                 " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
@@ -268,9 +210,14 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s], 
-                    "A", idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
+                    PDB_CHAIN_IDS[chn_idx], res_idx+1, atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
+
+        res_idx += 1
+        if (chn_idx < len(Ls) and res_idx == Ls[chn_idx]):
+            chn_idx += 1
+            res_idx = 0
 
 ######
 ######
@@ -512,7 +459,6 @@ for i in range(HbDonType.NTYPES):
         hbpolys[i,j,2,3:5] = torch.tensor(yrange)
         hbpolys[i,j,2,5:] = torch.tensor(coeffs)
 
-
 # kinematic parameters
 base_indices = torch.full((NAATOKENS,NTOTAL),0, dtype=torch.long) # base frame that builds each atom
 xyzs_in_base_frame = torch.ones((NAATOKENS,NTOTAL,4)) # coords of each atom in the base frame
@@ -663,3 +609,5 @@ for i in range(NAATOKENS):
             frame_indices[i,j,0] = i_l.index(x[0])
             frame_indices[i,j,1] = i_l.index(x[1])
             frame_indices[i,j,2] = i_l.index(x[2])
+
+

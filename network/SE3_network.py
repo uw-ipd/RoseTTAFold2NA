@@ -18,6 +18,7 @@ class SE3TransformerWrapper(nn.Module):
         super().__init__()
         # Build the network
         self.l1_in = l1_in_features
+        self.l1_out = l1_out_features
         #
         fiber_edge = Fiber({0: num_edge_features})
         if l1_out_features > 0:
@@ -46,8 +47,12 @@ class SE3TransformerWrapper(nn.Module):
                                   num_heads=n_heads,
                                   channels_div=div,
                                   fiber_edge=fiber_edge,
-                                  use_layer_norm=True)
-                                  #use_layer_norm=False)
+                                  #populate_edges=False,
+                                  #sum_over_edge=False,
+                                  use_layer_norm=True,
+                                  tensor_cores=True,
+                                  low_memory=True)#,
+                                  #populate_edge='log')
 
         self.reset_parameter()
 
@@ -69,15 +74,16 @@ class SE3TransformerWrapper(nn.Module):
                         nn.init.kaiming_normal_(p, nonlinearity='relu')
         
         # make last layers to be zero-initialized
-        #self.se3.graph_modules[-1].to_kernel_self['0'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['0'])
-        #self.se3.graph_modules[-1].to_kernel_self['1'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['1'])
+        self.se3.graph_modules[-1].to_kernel_self['0'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['0'])
+        self.se3.graph_modules[-1].to_kernel_self['1'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['1'])
         nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['0'])
-        nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['1'])
+        if self.l1_out > 0:
+            nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['1'])
 
-    def forward(self, G, type_0_features, type_1_features=None, edge_features=None, clamp_d=-1.0):
+    def forward(self, G, type_0_features, type_1_features=None, edge_features=None):
         if self.l1_in > 0:
             node_features = {'0': type_0_features, '1': type_1_features}
         else:
             node_features = {'0': type_0_features}
         edge_features = {'0': edge_features}
-        return self.se3(G, node_features, edge_features) #, clamp_d=clamp_d)
+        return self.se3(G, node_features, edge_features)
