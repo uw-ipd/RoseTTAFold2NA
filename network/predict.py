@@ -347,7 +347,7 @@ class Predictor():
         for prob in prob_s:
             prob += 1e-8
             prob = prob / torch.sum(prob, dim=0)[None]
-        util.writepdb(out_prefix+".pdb", best_xyz[0], seq[0, -1], bfacts=100*best_lddt[0].float())
+        util.writepdb(out_prefix+".pdb", best_xyz[0], seq[0, -1], L_s, bfacts=100*best_lddt[0].float())
         prob_s = [prob.permute(1,2,0).detach().cpu().numpy().astype(np.float16) for prob in prob_s]
         np.savez_compressed("%s.npz"%(out_prefix), 
             dist=prob_s[0].astype(np.float16), \

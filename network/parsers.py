@@ -74,6 +74,7 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
     fstream = open(filename,"r")
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+    table_na = {}
 
     for line in fstream:
         # skip labels
@@ -88,7 +89,6 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
         # remove lowercase letters and append to MSA
         msa_i = line.translate(table)
-        msa_i = msa_i.replace('B','D') # hacky...
         msa.append(msa_i)
 
         # sequence length
@@ -101,23 +101,22 @@ def parse_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False)
 
     # convert letters into numbers
     if rna_alphabet:
-        alphabet = np.array(list("00000000000000000000-000000ACGTN"), dtype='|S1').view(np.uint8)
+        alphabet = np.array(list("00000000000000000000-000000ACGUN"), dtype='|S1').view(np.uint8)
     elif dna_alphabet:
         alphabet = np.array(list("00000000000000000000-0ACGTD00000"), dtype='|S1').view(np.uint8)
     else:
-        alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
+        alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-X0000000000"), dtype='|S1').view(np.uint8)
     msa = np.array([list(s) for s in msa], dtype='|S1').view(np.uint8)
 
     for i in range(alphabet.shape[0]):
         msa[msa == alphabet[i]] = i
 
-    # also accept 'U' in rna_alphabet
+    # also accept 'T' in rna_alphabet
     if rna_alphabet:
-        msa[msa == ord("U")] = 30
+        msa[msa == ord("T")] = 30
 
-
-    #print ((msa>40).nonzero()) 
-    #print (msa_orig[6788]) 
+    # fail on any illegal characters
+    assert (np.all(msa<=31))
 
     ins = np.array(ins, dtype=np.uint8)
 

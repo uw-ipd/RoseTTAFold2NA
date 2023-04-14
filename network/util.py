@@ -178,7 +178,7 @@ def get_tips(xyz, seq):
 
 
 # writepdb
-def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
+def writepdb(filename, atoms, seq, Ls, idx_pdb=None, bfacts=None):
     f = open(filename,"w")
     ctr = 1
     scpu = seq.cpu().squeeze(0)
@@ -190,6 +190,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
     Bfacts = torch.clamp( bfacts.cpu(), 0, 100)
+    chn_idx, res_idx = 0, 0
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL):
@@ -198,7 +199,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
 
         atms = aa2long[s]
 
-        # his prot hack
+        # his protonation state hack
         if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
             atms = (
                 " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
@@ -209,9 +210,14 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s], 
-                    "A", idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
+                    PDB_CHAIN_IDS[chn_idx], res_idx+1, atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
+
+        res_idx += 1
+        if (chn_idx < len(Ls) and res_idx == Ls[chn_idx]):
+            chn_idx += 1
+            res_idx = 0
 
 ######
 ######

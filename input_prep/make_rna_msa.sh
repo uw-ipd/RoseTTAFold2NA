@@ -100,8 +100,8 @@ rm db0 blastn*.db
 
 for cut in 1.00 0.99 0.95 0.90
 do
-    cd-hit-est-2d -T $CPU -i $in_fasta -i2 trim.db -c $cut -o cdhitest2d.db -l $throw_away_sequences -M 5000 &> /dev/null 
-    cd-hit-est -T $CPU -i cdhitest2d.db -c $cut -o db -l $throw_away_sequences -M 5000 &> /dev/null 
+    cd-hit-est-2d -T $CPU -i $in_fasta -i2 trim.db -c $cut -o cdhitest2d.db -l $throw_away_sequences -M 0 &> /dev/null 
+    cd-hit-est -T $CPU -i cdhitest2d.db -c $cut -o db -l $throw_away_sequences -M 0 &> /dev/null 
     nhits=`grep '^>' db | wc -l`
     if [[ $nhits -lt $max_aln_seqs ]]
     then
@@ -118,7 +118,7 @@ do
     esl-reformat --replace=acgt:____ a2m nhmmer.a2m > $out_tag.unfilter.afa
     # add query
     mafft --preservecase --addfull $out_tag.unfilter.afa --keeplength $in_fasta > $out_tag.wquery.unfilt.afa 2> /dev/null
-    hhfilter -i $out_tag.wquery.unfilt.afa -id 99 -cov 50 -o $out_tag.afa
+    hhfilter -i $out_tag.wquery.unfilt.afa -id 99 -cov 50 -o $out_tag.afa -M first
     hitnum=`grep '^>' $out_tag.afa | wc -l`
     if [[  $hitnum -gt $max_hhfilter_seqs ]]
     then
