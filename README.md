@@ -15,6 +15,7 @@ cd RoseTTAFold2NA
 ```
 
 2. Create conda environment
+All external dependencies are contained in `RF2na-linux.yml`
 ```
 # create conda environment for RoseTTAFold2NA
 conda env create -f RF2na-linux.yml
@@ -82,11 +83,16 @@ cd example
 ../run_RF2NA.sh rna_pred rna_binding_protein.fa R:RNA.fa
 # run Protein/dsDNA prediction
 ../run_RF2NA.sh dna_pred dna_binding_protein.fa D:DNA.fa
-
 ```
-The first argument to the script is the output folder; remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` `S:xxx.fa` and `PR:xxx.fa` to specify protein, RNA, dsDNA, ssDNA, and paired protein/RNA respectively (default is protein).  
+### Inputs
+* The first argument to the script is the output folder
+* The remaining arguments are fasta files for individual chains in the structure.  Use the tags `P:xxx.fa` `R:xxx.fa` `D:xxx.fa` `S:xxx.fa` to specify protein, RNA, double-stranded DNA, and single-stranded DNA, respectively.  Use the tag `PR:xxx.fa` to specify paired protein/RNA.    Each chain is a separate file; 'D' will automatically generate a complementary DNA strand to the input strand.  
 
-Each chain is a separate file; 'D' will automatically generate a complementary DNA strand to the input strand.  Outputs are written to the folder `dna_pred` and `rna_pred`.
-
-## Expected outputs
-You will get a prediction with estimated per-residue LDDT in the B-factor column (`models/model_00.pdb`)
+### Expected outputs
+* Outputs are written to the folder provided as the first argument (`dna_pred` and `rna_pred`).
+* Model outputs are placed in a subfolder, `models` (e.g., `dna_pred.models`)
+* You will get a predicted structre with estimated per-residue LDDT in the B-factor column (`models/model_00.pdb`)
+* You will get a numpy `.npz` file (`models/model_00.npz`).  This can be read with `numpy.load` and contains three tables (L=complex length):
+   - dist (L x L x 37) - the predicted distogram
+   - lddt (L) - the per-residue predicted lddt
+   - pae (L x L) - the per-residue pair predicted error
