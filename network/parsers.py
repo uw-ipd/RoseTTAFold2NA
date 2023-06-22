@@ -21,7 +21,7 @@ to1letter = {
     "A":'b', "C":'d', "G":'h', "U":'u',
 }
 
-def read_template_pdb(L, pdb_fn, target_chain=None):
+def read_template_pdb(L, pdb_fn, target_chain=None, target_conf=1.0):
     # get full sequence from given PDB
     seq_full = list()
     prev_chain=''
@@ -61,8 +61,8 @@ def read_template_pdb(L, pdb_fn, target_chain=None):
     
     mask = torch.logical_not(torch.isnan(xyz[:,:3,0])) # (L, 3)
     mask = mask.all(dim=-1)[:,None]
-    conf = torch.where(mask, torch.full((L,1),0.1), torch.zeros(L,1)).float()
-    seq_1hot = torch.nn.functional.one_hot(seq, num_classes=32).float()
+    conf = torch.where(mask, torch.full((L,1),target_conf), torch.zeros(L,1)).float()
+    seq_1hot = torch.nn.functional.one_hot(seq, num_classes=NAATOKENS-1).float()
     t1d = torch.cat((seq_1hot, conf), -1)
 
     #return seq_full[None], ins[None], L_s, xyz[None], t1d[None]
@@ -519,9 +519,9 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn, templ_to_use, max_templ=20):
     
     xyz = np.vstack(xyz).astype(np.float32)
     mask = np.vstack(mask).astype(np.float32)
-    qmap = np.vstack(qmap).astype(np.long)
+    qmap = np.vstack(qmap).astype(np.int64)
     f1d = np.vstack(f1d).astype(np.float32)
-    seq = np.hstack(seq).astype(np.long)
+    seq = np.hstack(seq).astype(np.int64)
     ids = ids
 
     return torch.from_numpy(xyz), torch.from_numpy(mask), torch.from_numpy(qmap), \
