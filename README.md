@@ -81,7 +81,7 @@ conda activate RF2NA
 cd example
 # run Protein/RNA prediction
 ../run_RF2NA.sh rna_pred rna_binding_protein.fa R:RNA.fa
-# run Protein/dsDNA prediction
+# run Protein/DNA prediction
 ../run_RF2NA.sh dna_pred dna_binding_protein.fa D:DNA.fa
 ```
 ### Inputs
