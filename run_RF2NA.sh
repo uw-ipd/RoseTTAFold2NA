@@ -78,8 +78,10 @@ for i in "$@"
 do
     type=`echo $i | awk -F: '{if (NF==1) {print "P"} else {print $1}}'`
     type=${type^^}
-    fasta=`echo $i | awk -F: '{if (NF==1) {print $1} else {print $2}}'`
-    tag=`basename $fasta | sed -E 's/\.fasta$|\.fas$|\.fa$//'`
+    fasta=`echo $i`
+    fasta_name=`echo $fasta | awk -F: '{if (NF==1) {print $1} else {print $2}}'`
+    tag=`basename $fasta_name | sed -E 's/\.fasta$|\.fas$|\.fa$//'`
+    type=`basename $type`  # extract only the last component after the last '/', so users can pass in an absolute path for each FASTA
 
     if [ $type = 'P' ]
     then
