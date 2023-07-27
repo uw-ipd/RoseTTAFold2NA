@@ -62,6 +62,14 @@ families=`grep -v '^#' cmscan.tblout | head -n $max_rfam_num | uniq | awk '{prin
 echo "Rfam families:" $families
 rm cmscan.out cmscan.tblout
 
+# Check if any Rfam families were found; if not, create an RNA MSA using the input FASTA sequence only
+if [[ -z $families ]]
+then
+    echo "No Rfam families found for the input sequence $in_fasta. Creating an RNA MSA using FASTA input sequence only."
+    cp $in_fasta $out_tag.afa
+    exit 0
+fi
+
 # Rfam->RNACentral
 zcat $db0to1 | grep -E \'$families\' | awk '{print $1,1+$5,1+$6}' > rfam1.tab
 head -n $max_aln_seqs rfam1.tab > rfam1.tab.tmp; mv rfam1.tab.tmp rfam1.tab
