@@ -16,8 +16,8 @@ SCRIPT=`realpath -s $0`
 export PIPEDIR=`dirname $SCRIPT`
 HHDB="$PIPEDIR/pdb100_2021Mar03/pdb100_2021Mar03"
 
-CPU="8"  # number of CPUs to use
-MEM="64" # max memory (in GB)
+CPU="128"  # number of CPUs to use
+MEM="500" # max memory (in GB)
 
 WDIR=`realpath -s $1`  # working folder
 mkdir -p $WDIR/log
@@ -105,6 +105,12 @@ do
         nD=$((nD+1))
     fi
 done
+
+############################################################
+# Clean RNA msa from non-standard bases
+############################################################
+echo "CLeaning RNA MSA from non-standard bases"
+$PIPEDIR/process_msa_rf.sh $WDIR/$tag.afa
 
 ############################################################
 # Merge MSAs based on taxonomy ID
