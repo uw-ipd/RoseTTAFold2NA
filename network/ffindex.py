@@ -8,7 +8,7 @@ Created on Apr 30, 2014
 '''
 
 
-import sys
+import os
 import mmap
 from collections import namedtuple
 
@@ -16,6 +16,9 @@ FFindexEntry = namedtuple("FFindexEntry", "name, offset, length")
 
 
 def read_index(ffindex_filename):
+    if os.path.getsize(ffindex_filename) == 0:
+        return None
+
     entries = []
     
     fh = open(ffindex_filename)
@@ -28,14 +31,20 @@ def read_index(ffindex_filename):
 
 
 def read_data(ffdata_filename):
+    if os.path.getsize(ffdata_filename) == 0:
+        return None
+
     fh = open(ffdata_filename, "rb")
     data = mmap.mmap(fh.fileno(), 0, prot=mmap.PROT_READ)
     fh.close()
+
     return data
 
 
 def get_entry_by_name(name, index):
     #TODO: bsearch
+    if index is None:
+        return None
     for entry in index:
         if(name == entry.name):
             return entry
@@ -43,6 +52,8 @@ def get_entry_by_name(name, index):
 
 
 def read_entry_lines(entry, data):
+    if data is None:
+        return []
     lines = data[entry.offset:entry.offset + entry.length - 1].decode("utf-8").split("\n")
     return lines
 
