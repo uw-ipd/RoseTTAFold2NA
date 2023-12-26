@@ -26,6 +26,7 @@ conda activate RF2NA
 cd SE3Transformer
 pip install --no-cache-dir -r requirements.txt
 python setup.py install
+cd ..
 ```
 
 3. Download pre-trained weights under network directory
