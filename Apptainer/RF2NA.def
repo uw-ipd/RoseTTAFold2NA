@@ -26,7 +26,7 @@ From: nvidia/cuda:12.3.1-runtime-ubuntu22.04
    
     git clone https://github.com/w34sel/RoseTTAFold2NA.git 
     cd RoseTTAFold2NA
-    git checkout 43b6d52
+    git checkout 3a2abe6
     conda config --set channel_priority flexible
     conda env create -f RF2na-linux.yml 
     echo "#! /bin/bash" >> ~/.bashrc  
