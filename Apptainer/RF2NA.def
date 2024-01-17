@@ -60,7 +60,7 @@ From: nvidia/cuda:12.3.1-runtime-ubuntu22.04
 %help
 
     # Mount the DB's into the container
-    export APPTAINER_BIND="<local_path>:/opt/RoseTTAFold2NA/bfd,<local_path>:/opt/RoseTTAFold2NA/RNA,<local_path>:/opt/RoseTTAFold2NA/UniR>
+    export APPTAINER_BIND="<local_path>:/opt/RoseTTAFold2NA/bfd,<local_path>:/opt/RoseTTAFold2NA/RNA,<local_path>:/opt/RoseTTAFold2NA/UniRef30_2020_06,<local_path>:/opt/RoseTTAFold2NA/pdb100_2021Mar03"
 
     # run rosetta2nafold
     apptainer run --nv <container_name> <output_dir> <fa_filename> <type_RNA_DNA>
