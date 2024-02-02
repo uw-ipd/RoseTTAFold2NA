@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # make the script stop when error (non-true exit code) occurs
-set -e
+#set -e
 
 ############################################################
 # >>> conda initialize >>>
