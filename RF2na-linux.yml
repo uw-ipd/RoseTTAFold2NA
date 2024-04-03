@@ -4,21 +4,26 @@ channels:
   - nvidia
   - defaults
   - conda-forge
+  - bioconda
+  - pyg
+  - dglteam/label/cu121
 dependencies:
-  - python=3.10
+  - python==3.10
   - pip
-  - pytorch
   - requests
-  - pytorch-cuda=11.7
-  - dglteam/label/cu117::dgl
-  - pyg::pyg
-  - bioconda::mafft
-  - bioconda::hhsuite
-  - bioconda::blast
-  - bioconda::hmmer>=3.3
-  - bioconda::infernal
-  - bioconda::cd-hit
-  - bioconda::csblast
+  - pytorch==2.2
+  - pytorch-cuda==12.1
+  - dgl==2.0.0.cu121
+  - pyg
+  - pandas
+  - mafft
+  - hhsuite
+  - blast
+  - hmmer>=3.3
+  - infernal
+  - cd-hit
+  - csblast
   - pip:
     - psutil
     - tqdm
+    - torchdata

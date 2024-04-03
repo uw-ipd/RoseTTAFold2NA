@@ -360,9 +360,12 @@ if __name__ == "__main__":
 
     # Read template database
     FFDB = args.db
-    FFindexDB = namedtuple("FFindexDB", "index, data")
-    ffdb = FFindexDB(read_index(FFDB+'_pdb.ffindex'),
-                     read_data(FFDB+'_pdb.ffdata'))
+    if FFDB is not None:
+        FFindexDB = namedtuple("FFindexDB", "index, data")
+        ffdb = FFindexDB(read_index(FFDB+'_pdb.ffindex'),
+                         read_data(FFDB+'_pdb.ffdata'))
+    else:
+        ffdb = None
 
     if (torch.cuda.is_available()):
         print ("Running on GPU")
