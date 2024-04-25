@@ -113,9 +113,9 @@ done
 ############################################################
 if [ $nP -eq 1 ] && [ $nD -eq 0 ] && [ $nR -eq 1 ]
 then
-    echo "Creating joint Protein/RNA MSA"
-    echo " -> Running command: $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM"
-    $PIPEDIR/input_prep/make_pMSAs_prot_RNA.py $WDIR/$lastP.msa0.a3m $WDIR/$lastR.afa $WDIR/$lastP.$lastR.a3m &> /dev/null 
+    echo "Creating joint Protein-RNA MSA"
+    echo " -> Running command: $PIPEDIR/input_prep/merge_msa_prot_rna.py $WDIR/$lastP.msa0.a3m $WDIR/$lastR.afa $WDIR/$lastP.$lastR.a3m"
+    $PIPEDIR/input_prep/merge_msa_prot_rna.py $WDIR/$lastP.msa0.a3m $WDIR/$lastR.afa $WDIR/$lastP.$lastR.a3m > $WDIR/log/merge_msa_prot_rna.stdout 2> $WDIR/log/merge_msa_prot_rna.stderr
     argstring="PR:$WDIR/$lastP.$lastR.a3m:$WDIR/$lastP.hhr:$WDIR/$lastP.atab"
 fi
 
