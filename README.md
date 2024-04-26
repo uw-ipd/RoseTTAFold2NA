@@ -15,18 +15,11 @@ cd RoseTTAFold2NA
 ```
 
 2. Create conda environment
-All external dependencies are contained in `RF2na-linux.yml`
+All package dependencies are handled by `create_env.sh`.  
+Also provided is the conda YAML and conda table of packages.
 ```
 # create conda environment for RoseTTAFold2NA
-conda env create -f RF2na-linux.yml
-```
-You also need to install NVIDIA's SE(3)-Transformer (**please use SE3Transformer in this repo to install**).
-```
-conda activate RF2NA
-cd SE3Transformer
-pip install --no-cache-dir -r requirements.txt
-python setup.py install
-cd ..
+$ source create_env.sh
 ```
 
 3. Download pre-trained weights under network directory
