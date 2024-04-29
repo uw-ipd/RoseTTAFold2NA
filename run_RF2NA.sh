@@ -6,9 +6,9 @@ set -e
 ############################################################
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('conda' 'shell.bash' 'hook' 2> /dev/null)"
-eval "$__conda_setup"
-unset __conda_setup
+#__conda_setup="$('conda' 'shell.bash' 'hook' 2> /dev/null)"
+#eval "$__conda_setup"
+#unset __conda_setup
 # <<< conda initialize <<<
 ############################################################
 
@@ -22,7 +22,7 @@ MEM="64" # max memory (in GB)
 WDIR=`realpath -s $1`  # working folder
 mkdir -p $WDIR/log
 
-conda activate RF2NA
+#conda activate RF2NA
 
 # process protein (MSA + homology search)
 function proteinMSA {
@@ -36,7 +36,7 @@ function proteinMSA {
     then
         echo "Running HHblits"
         echo " -> Running command: $PIPEDIR/input_prep/make_protein_msa.sh $seqfile $WDIR $tag $CPU $MEM"
-        $PIPEDIR/input_prep/make_protein_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout 2> $WDIR/log/make_msa.$tag.stderr
+        $PIPEDIR/input_prep/make_protein_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout #2> $WDIR/log/make_msa.$tag.stderr
     fi
 
 
@@ -48,7 +48,7 @@ function proteinMSA {
         echo "Running hhsearch"
         HH="hhsearch -b 50 -B 500 -z 50 -Z 500 -mact 0.05 -cpu $CPU -maxmem $MEM -aliw 100000 -e 100 -p 5.0 -d $HHDB"
         echo " -> Running command: $HH -i $WDIR/$tag.msa0.ss2.a3m -o $WDIR/$tag.hhr -atab $WDIR/$tag.atab -v 0"
-        $HH -i $WDIR/$tag.msa0.a3m -o $WDIR/$tag.hhr -atab $WDIR/$tag.atab -v 0 > $WDIR/log/hhsearch.$tag.stdout 2> $WDIR/log/hhsearch.$tag.stderr
+        $HH -i $WDIR/$tag.msa0.a3m -o $WDIR/$tag.hhr -atab $WDIR/$tag.atab -v 0 > $WDIR/log/hhsearch.$tag.stdout #2> $WDIR/log/hhsearch.$tag.stderr
     fi
 }
 
@@ -64,7 +64,7 @@ function RNAMSA {
     then
         echo "Running rMSA (lite)"
         echo " -> Running command: $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM"
-        $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout 2> $WDIR/log/make_msa.$tag.stderr
+        $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM > $WDIR/log/make_msa.$tag.stdout #2> $WDIR/log/make_msa.$tag.stderr
     fi
 }
 
@@ -85,24 +85,25 @@ do
 
     if [ $type = 'P' ]
     then
-        proteinMSA $fasta $tag
+        proteinMSA $fasta_name $tag
         argstring+="P:$WDIR/$tag.msa0.a3m:$WDIR/$tag.hhr:$WDIR/$tag.atab "
         nP=$((nP+1))
         lastP="$tag"
     elif [ $type = 'R' ]
     then
-        RNAMSA $fasta $tag
+        echo $fasta_name $tag
+        RNAMSA $fasta_name $tag
         argstring+="R:$WDIR/$tag.afa "
         nR=$((nR+1))
         lastR="$tag"
     elif [ $type = 'D' ]
     then
-        cp $fasta $WDIR/$tag.fa
+        cp $fasta_name $WDIR/$tag.fa
         argstring+="D:$WDIR/$tag.fa "
         nD=$((nD+2))
     elif [ $type = 'S' ]
     then
-        cp $fasta $WDIR/$tag.fa
+        cp $fasta_name $WDIR/$tag.fa
         argstring+="S:$WDIR/$tag.fa "
         nD=$((nD+1))
     fi

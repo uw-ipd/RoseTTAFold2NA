@@ -1,29 +1,28 @@
 name: RF2NA
-channels:
-  - pytorch
-  - nvidia
-  - defaults
-  - conda-forge
-  - bioconda
-  - pyg
-  - dglteam/label/cu121
 dependencies:
-  - python==3.10
+  - python==3.10.14
   - pip
-  - requests
-  - pytorch==2.2
-  - pytorch-cuda==12.1
-  - dgl==2.0.0.cu121
-  - pyg
-  - pandas
-  - mafft
-  - hhsuite
-  - blast
-  - hmmer>=3.3
-  - infernal
-  - cd-hit
-  - csblast
+  - bioconda::mafft
+  - bioconda::hhsuite
+  - bioconda::blast
+  - bioconda::hmmer>=3.3
+  - bioconda::infernal
+  - bioconda::cd-hit
+  - bioconda::csblast
+  - conda-forge::llvm-openmp
   - pip:
+    - pandas
+    - torch==2.2.1 
+    - torchvision 
+    - torchaudio 
+    - torchdata 
+    - torch_geometric
     - psutil
     - tqdm
     - torchdata
+    - pydantic 
+    - e3nn 
+    - wandb 
+    - pynvml 
+    - git+https://github.com/NVIDIA/dllogger#egg=dllogger
+    - https://data.dgl.ai/wheels/cu121/dgl-2.0.0%2Bcu121-cp310-cp310-manylinux1_x86_64.whl
