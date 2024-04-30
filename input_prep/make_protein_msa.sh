@@ -10,8 +10,17 @@ CPU="$4"
 MEM="$5"
 
 # sequence databases
-DB_UR30="$PIPEDIR/UniRef30_2020_06/UniRef30_2020_06"
-DB_BFD="$PIPEDIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
+if [ -z  "${DB_UR30}" ]; then
+    DB_UR30="$PIPEDIR/UniRef30_2020_06/UniRef30_2020_06"
+else
+    DB_UR30=$DB_UR30
+fi
+
+if [ -z  "${DB_BDF}" ]; then
+    DB_BFD="$PIPEDIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
+else
+    DB_BFD=$DB_BFD
+fi
 
 # setup hhblits command
 HHBLITS_UR30="hhblits -o /dev/null -mact 0.35 -maxfilt 100000000 -neffmax 20 -cov 25 -cpu $CPU -nodiff -realign_max 100000000 -maxseq 1000000 -maxmem $MEM -n 4 -d $DB_UR30"

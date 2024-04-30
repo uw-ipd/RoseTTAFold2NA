@@ -14,7 +14,12 @@ unset __conda_setup
 
 SCRIPT=`realpath -s $0`
 export PIPEDIR=`dirname $SCRIPT`
-HHDB="$PIPEDIR/pdb100_2021Mar03/pdb100_2021Mar03"
+
+if [ -z "${HH_DB}" ]; then
+    HHDB="$PIPEDIR/pdb100_2021Mar03/pdb100_2021Mar03"
+else
+    HHDB=$HH_DB
+fi
 
 CPU="8"  # number of CPUs to use
 MEM="64" # max memory (in GB)

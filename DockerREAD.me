@@ -2,6 +2,6 @@ This repo contains the docker file for building the docker image capable of runn
 The image does not contain the databases or the base code to run RF2NA. Those will need to be downloaded and mounted seperately.
 This image is purely set up to run in interactive mode and example command might look like this when being launched from this repo.0
 docker run -it --gpus all -v `pwd`:/RF2NA/ -v /path/to/inputs/:/inputs/ rosettafold2-na /bin/bash
-from here you can run the protocol as described in the github repo. 
+from here you can run the protocol as described in the github repo. (Be careful NOT to run the bash script with sh. It needs to be a bash command directly. i.e. ./run_RF2NA.sh ...)
 This repo also contains several tweaks to the original code to get things up and running. These have not been thoroughly tested and
 this repo should be considered to be in an intermediate development state not yet ready for production.
