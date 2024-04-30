@@ -37,6 +37,7 @@ def read_a3m(fn):
     # read sequences in a3m file
     # only take one (having the highest seqID to query) per each taxID
     is_first = True
+    is_ignore = True
     tmp = {}
     if fn.split('.')[-1] == "gz":
         fp = gzip.open(fn, 'rt')
@@ -91,6 +92,7 @@ def read_afa(fn):
     # read sequences in afa file (RNA)
     # only take one (having the highest seqID to query) per each taxID
     is_first = True
+    is_ignore = True
     tmp = {}
     if fn.split('.')[-1] == "gz":
         fp = gzip.open(fn, 'rt')
@@ -233,7 +235,7 @@ def main(fnA, fnB, pair_fn):
 if __name__ == '__main__':
 
     if len(sys.argv) == 1:
-        print ("USAGE: python make_paired_MSA_simple.py [a3m for chain A] [a3m for chain B] [output filename]")
+        print ("USAGE: python merge_msa_prot_rna.py [a3m for Protein] [afa for RNA] [a3m for output]")
         sys.exit()
 
     fnA = sys.argv[1]

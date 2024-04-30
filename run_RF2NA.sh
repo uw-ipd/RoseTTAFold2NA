@@ -78,10 +78,8 @@ for i in "$@"
 do
     type=`echo $i | awk -F: '{if (NF==1) {print "P"} else {print $1}}'`
     type=${type^^}
-    fasta=`echo $i`
-    fasta_name=`echo $fasta | awk -F: '{if (NF==1) {print $1} else {print $2}}'`
-    tag=`basename $fasta_name | sed -E 's/\.fasta$|\.fas$|\.fa$//'`
-    type=`basename $type`  # extract only the last component after the last '/', so users can pass in an absolute path for each FASTA
+    fasta=`echo $i | awk -F: '{if (NF==1) {print $1} else {print $2}}'`
+    tag=`basename $fasta | sed -E 's/\.fasta$|\.fas$|\.fa$//'`
 
     if [ $type = 'P' ]
     then
@@ -113,9 +111,9 @@ done
 ############################################################
 if [ $nP -eq 1 ] && [ $nD -eq 0 ] && [ $nR -eq 1 ]
 then
-    echo "Creating joint Protein/RNA MSA"
-    echo " -> Running command: $PIPEDIR/input_prep/make_rna_msa.sh $seqfile $WDIR $tag $CPU $MEM"
-    $PIPEDIR/input_prep/make_pMSAs_prot_RNA.py $WDIR/$lastP.msa0.a3m $WDIR/$lastR.afa $WDIR/$lastP.$lastR.a3m &> /dev/null 
+    echo "Creating joint Protein-RNA MSA"
+    echo " -> Running command: $PIPEDIR/input_prep/merge_msa_prot_rna.py $WDIR/$lastP.msa0.a3m $WDIR/$lastR.afa $WDIR/$lastP.$lastR.a3m"
+    $PIPEDIR/input_prep/merge_msa_prot_rna.py $WDIR/$lastP.msa0.a3m $WDIR/$lastR.afa $WDIR/$lastP.$lastR.a3m > $WDIR/log/make_pMSA.$tag.stdout 2> $WDIR/log/make_pMSA.$tag.stderr
     argstring="PR:$WDIR/$lastP.$lastR.a3m:$WDIR/$lastP.hhr:$WDIR/$lastP.atab"
 fi
 
