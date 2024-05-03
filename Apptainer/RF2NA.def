@@ -1,0 +1,66 @@
+Bootstrap: docker
+From: nvidia/cuda:12.3.1-runtime-ubuntu22.04
+
+%labels
+    Author Hong Tao 
+    Maintainer  hong.tao@imba.oew.ac.at
+    URL https://clip.science
+
+%files
+
+%environment
+    export BASH_ENV=/opt/etc/bashrc
+    export PATH="/opt/miniconda3/bin/:$PATH"
+    
+%post
+    export PATH="/opt/miniconda3/bin/:$PATH"
+    cd /opt
+    mkdir -p miniconda3
+    apt update && apt install -y wget git
+    rm -rf /var/lib/apt/lists/*
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda3/miniconda.sh
+    bash /opt/miniconda3/miniconda.sh -b -u -p /opt/miniconda3
+    rm -rf /opt/miniconda3/miniconda.sh   
+    conda init bash
+    conda install conda-forge::conda-ecosystem-user-package-isolation
+   
+    git clone https://github.com/w34sel/RoseTTAFold2NA.git 
+    cd RoseTTAFold2NA
+    git checkout 3a2abe6
+    conda config --set channel_priority flexible
+    conda env create -f RF2na-linux.yml 
+    echo "#! /bin/bash" >> ~/.bashrc  
+    echo "\n\n" >> ~/.bashrc 
+    echo "# script to activate the conda environment" > ~/.bashrc 
+    conda init bash 
+    echo "\n" >> ~/.bashrc 
+    echo "conda activate RF2NA" >> ~/.bashrc 
+    echo "echo \"RF2NA running ...\"" >>  ~/.bashrc 
+    conda clean -a 
+    mkdir /opt/etc/ 
+    cp ~/.bashrc /opt/etc/bashrc
+
+    .  /opt/etc/bashrc
+    cd SE3Transformer
+    pip install --no-cache-dir -r requirements.txt
+    python setup.py install
+    cd ..
+    cd network
+    wget https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz
+    tar xvfz RF2NA_apr23.tgz
+    ls weights/ # it should contain a 1.1GB weights file
+    rm RF2NA_apr23.tgz
+    cd ..
+
+%runscript
+    exec /opt/RoseTTAFold2NA/run_RF2NA.sh "$@"
+
+%test
+
+%help
+
+    # Mount the DB's into the container
+    export APPTAINER_BIND="<local_path>:/opt/RoseTTAFold2NA/bfd,<local_path>:/opt/RoseTTAFold2NA/RNA,<local_path>:/opt/RoseTTAFold2NA/UniRef30_2020_06,<local_path>:/opt/RoseTTAFold2NA/pdb100_2021Mar03"
+
+    # run rosetta2nafold
+    apptainer run --nv <container_name> <output_dir> <fa_filename> <type_RNA_DNA>

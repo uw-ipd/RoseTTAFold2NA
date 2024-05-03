@@ -7,7 +7,7 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - pytorch
+  - pytorch::pytorch=2.0
   - requests
   - pytorch-cuda=11.7
   - dglteam/label/cu117::dgl
