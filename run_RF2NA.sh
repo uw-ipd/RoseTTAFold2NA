@@ -107,6 +107,12 @@ do
 done
 
 ############################################################
+# Clean RNA msa from non-standard bases
+############################################################
+echo "CLeaning RNA MSA from non-standard bases"
+$PIPEDIR/process_msa_rf.sh $WDIR/$tag.afa
+
+############################################################
 # Merge MSAs based on taxonomy ID
 ############################################################
 if [ $nP -eq 1 ] && [ $nD -eq 0 ] && [ $nR -eq 1 ]
