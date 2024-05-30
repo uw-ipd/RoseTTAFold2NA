@@ -21,6 +21,12 @@ else
     HHDB=$HH_DB
 fi
 
+if [ -z "${RF2NA_WEIGHTS}" ]; then
+    WEIGHTS=$PIPEDIR/network/weights/RF2NA_apr23.pt
+else
+    WEIGHTS=$RF2NA_WEIGHTS
+fi
+
 CPU="8"  # number of CPUs to use
 MEM="64" # max memory (in GB)
 
@@ -132,7 +138,7 @@ mkdir -p $WDIR/models
 python $PIPEDIR/network/predict.py \
     -inputs $argstring \
     -prefix $WDIR/models/model \
-    -model $PIPEDIR/network/weights/RF2NA_apr23.pt \
+    -model $WEIGHTS \
     -db $HHDB #2> $WDIR/log/network.stderr #1> $WDIR/log/network.stdout 
 
 echo "Done"

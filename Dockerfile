@@ -1,5 +1,5 @@
 FROM mambaorg/micromamba:1.5.0 as micromamba
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Create root owned env: https://github.com/mamba-org/micromamba-docker/blob/main/examples/add_micromamba/Dockerfile
@@ -25,10 +25,6 @@ SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
 
 
-
-#COPY . /home/ProteinMPNN
-#ADD dockerrequirements.txt /requirements.txt
-
 # Install base utilities
 RUN apt-get update \
     && apt-get install -y build-essential \
@@ -51,15 +47,7 @@ ADD . /RF2NA/
 #ADD SE3Transformer /SE3Transformer
 RUN cd /RF2NA/SE3Transformer/ && python3 setup.py install
 RUN ln -s /usr/bin/python3 /usr/bin/python
-#RUN pip install -r /requirements.txt
-#ADD requirements.txt /home/requirements.txt
-#RUN pip install -r /home/requirements.txt
-#WORKDIR /workdir/
-#RUN wget https://github.com/soedinglab/hh-suite/releases/download/v3.3.0/hhsuite-3.3.0-AVX2-Linux.tar.gz
-#RUN tar xvfz hhsuite-3.3.0-AVX2-Linux.tar.gz
-RUN cd /RF2NA/network/\
-    && wget https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz\
-    && tar xvfz RF2NA_apr23.tgz
+
 RUN git clone https://github.com/soedinglab/hh-suite.git\
     && mkdir -p hh-suite/build && cd hh-suite/build\
     && cmake -DCMAKE_INSTALL_PREFIX=. ..\
@@ -72,6 +60,7 @@ RUN apt-get update \
 
 RUN pip install pandas
 RUN pip install pydantic
-ENV HH_DB=/mnt/databases/pdb100_2021Mar03/pdb100_2021Mar03
-ENV DB_UR30=/mnt/databases/UniRef30_2020_06/UniRef30_2020_06
-ENV DB_BFD=/mnt/databases/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt
+ENV HH_DB=/mnt/databases/rfaa/latest/pdb100_2021Mar03/pdb100_2021Mar03
+ENV DB_UR30=/mnt/databases/rfaa/latest/UniRef30_2020_06/UniRef30_2020_06
+ENV DB_BFD=/mnt/databases/rfaa/latest/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt
+ENV RF2NA_WEIGHTS=/mnt/databases/weights/RF2NA_apr23.pt
