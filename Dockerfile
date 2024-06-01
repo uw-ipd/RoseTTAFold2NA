@@ -63,4 +63,4 @@ RUN pip install pydantic
 ENV HH_DB=/mnt/databases/rfaa/latest/pdb100_2021Mar03/pdb100_2021Mar03
 ENV DB_UR30=/mnt/databases/rfaa/latest/UniRef30_2020_06/UniRef30_2020_06
 ENV DB_BFD=/mnt/databases/rfaa/latest/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt
-ENV RF2NA_WEIGHTS=/mnt/databases/weights/RF2NA_apr23.pt
+ENV RF2NA_WEIGHTS=/mnt/databases/rfaa/latest/weights/RF2NA_apr23.pt
