@@ -10,8 +10,17 @@ CPU="$4"
 MEM="$5"
 
 # sequence databases
-DB_UR30="$PIPEDIR/UniRef30_2020_06/UniRef30_2020_06"
-DB_BFD="$PIPEDIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
+if [ -z  "${DB_UR30}" ]; then
+    DB_UR30="$PIPEDIR/UniRef30_2020_06/UniRef30_2020_06"
+else
+    DB_UR30=$DB_UR30
+fi
+
+if [ -z  "${DB_BFD}" ]; then
+    DB_BFD="$PIPEDIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt"
+else
+    DB_BFD=$DB_BFD
+fi
 
 # setup hhblits command
 HHBLITS_UR30="hhblits -o /dev/null -mact 0.35 -maxfilt 100000000 -neffmax 20 -cov 25 -cpu $CPU -nodiff -realign_max 100000000 -maxseq 1000000 -maxmem $MEM -n 4 -d $DB_UR30"
@@ -59,6 +68,7 @@ if [ ! -s ${out_prefix}.msa0.a3m ]
 then
     e=1e-3
     echo "Running HHblits against BFD with E-value cutoff $e"
+    echo "hhblits command: $HHBLITS_BFD -i $prev_a3m -oa3m $tmp_dir/t000_.$e.bfd.a3m -e $e -v 0"
     $HHBLITS_BFD -i $prev_a3m -oa3m $tmp_dir/t000_.$e.bfd.a3m -e $e -v 0
     hhfilter -id 90 -cov 75 -i $tmp_dir/t000_.$e.bfd.a3m -o $tmp_dir/t000_.$e.bfd.id90cov75.a3m
     hhfilter -id 90 -cov 50 -i $tmp_dir/t000_.$e.bfd.a3m -o $tmp_dir/t000_.$e.bfd.id90cov50.a3m
